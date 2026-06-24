@@ -27,6 +27,12 @@
   .weeknav{ display:flex; align-items:center; gap:10px; }
   .weeknav .wklabel{ font-weight:800; font-size:13px; min-width:240px; text-align:center; line-height:1.25; }
 
+  /* ===== Schede (tab) ===== */
+  .tabs{ display:flex; gap:6px; padding:10px 16px 0; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+  .tabs button{ font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px 10px 0 0; background:var(--panel2); border:1px solid var(--line); border-bottom:none; color:var(--muted); position:relative; top:1px; }
+  .tabs button:hover{ color:var(--text); }
+  .tabs button.active{ color:var(--text); background:var(--panel); border-color:#30445f; }
+
   /* ===== Week strip (tutti i giorni) ===== */
   .week{ display:flex; gap:10px; overflow-x:auto; padding:12px 16px 26px; align-items:flex-start; }
   .day{ flex:1 0 215px; min-width:215px; max-width:340px; border:1px solid var(--line); border-radius:14px; background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
@@ -52,6 +58,7 @@
   .shift.afternoon .shiftHead{ background:var(--p-bar); color:#1b1300; }
   .shift.absent    .shiftHead{ background:var(--a-bar); color:#330000; }
   .shift.work .shiftHead{ background:#2ea043; color:#fff; }
+  .shift.present .shiftHead{ background:#2ea043; color:#fff; }
   .shift.home .shiftHead{ background:#39424f; color:#cfd8e3; }
   .day.weekend .dayHead{ background:rgba(46,160,67,.12); }
   .day.weekend .dayHead .dow{ color:#7ee2a0; }
@@ -78,6 +85,7 @@
   .shift.afternoon .badge{ border-left:3px solid var(--p-bar); }
   .shift.absent    .badge{ border-left:3px solid var(--a-bar); }
   .shift.work .badge{ border-left:3px solid #2ea043; }
+  .shift.present .badge{ border-left:3px solid #2ea043; }
   .shift.home .badge{ border-left:3px solid #39424f; }
   .badge.dim{ opacity:.6; }
   .badge.dim:hover{ opacity:.85; }
@@ -147,7 +155,7 @@
 <header>
   <div>
     <h1>Presenze Divisione — Settimana</h1>
-    <div class="small muted">Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.</div>
+    <div class="small muted" id="subTitle">Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.</div>
   </div>
   <div class="weeknav">
     <button id="prevWk" class="ghost" title="Settimana precedente">◀</button>
@@ -165,6 +173,8 @@
     <button id="resetBtn" class="danger" title="Svuota le scelte della settimana">Reset settimana</button>
   </div>
 </header>
+
+<div class="tabs" id="tabs"></div>
 
 <div id="cloudBanner" class="filebanner"></div>
 <div id="fileBanner" class="filebanner"></div>
@@ -242,14 +252,25 @@ window.HARD_WORKERS = [
 /* Due reparti: Area Prestampa (ex Prestampa + Revisione) e Reparto Stampa (ex Stampa + Allestimento) */
 /* Aree: Senza Turno (orario fisso 8-16:20), Area Prestampa, Reparto Stampa */
 const DEPTS = [
-  { id:"N", name:"Area Senza Turno", hours:"8:00–16:20", fixedMorning:true },
-  { id:"P", name:"Area Prestampa" },
-  { id:"S", name:"Reparto Stampa" },
+  { id:"N", name:"Area Senza Turno", section:"produzione", hours:"8:00–16:20", fixedMorning:true },
+  { id:"P", name:"Area Prestampa", section:"produzione" },
+  { id:"S", name:"Reparto Stampa", section:"produzione" },
+  // Resto della Divisione: orario fisso 8:00–16:20, nessun turno
+  { id:"AM", name:"Area Amministrativa",   section:"divisione", hours:"8:00–16:20" },
+  { id:"TE", name:"Area Tecnica",          section:"divisione", hours:"8:00–16:20" },
+  { id:"GR", name:"Progettazione Grafica", section:"divisione", hours:"8:00–16:20" },
+  { id:"SP", name:"Spedizioni",            section:"divisione", hours:"8:00–16:20" },
 ];
+/* Schede (tab) della pagina */
+const SECTIONS = [
+  { id:"produzione", label:"Produzione" },
+  { id:"divisione",  label:"Resto Divisione" },
+];
+function sectionOf(deptId){ return (DEPTS.find(d=>d.id===deptId)?.section) || "produzione"; }
 function mapDept(old){
   const o=String(old||"").toUpperCase();
-  if(o==="N") return "N";                          // Senza Turno
-  if(o==="S"||o==="B"||o==="C") return "S";       // Stampa, Allestimento -> Reparto Stampa
+  if(DEPTS.some(d=>d.id===o)) return o;            // id già valido (N,P,S,AM,TE,GR,SP)
+  if(o==="B"||o==="C") return "S";                 // legacy: Allestimento -> Reparto Stampa
   return "P";                                      // Prestampa, Revisione, default -> Area Prestampa
 }
 /* Operai rimossi definitivamente dalla compagine (filtrati anche dai dati salvati) */
@@ -280,8 +301,16 @@ const SHIFTS_WE = [
   { id:"work", label:"Al lavoro", split:false },
   { id:"home", label:"A casa",    split:false, dim:true },
 ];
+/* Resto Divisione (feriale): nessun turno, solo presenza/assenza */
+const SHIFTS_DIV = [
+  { id:"present", label:"Al lavoro (8:00–16:20)", split:false, group:"div" },
+  { id:"absent",  label:"Assenze", split:false },
+];
 function isWeekend(date){ const d=date.getDay(); return d===0 || d===6; }
-function shiftsFor(date){ return isWeekend(date) ? SHIFTS_WE : SHIFTS; }
+function shiftsFor(date, section){
+  if(isWeekend(date)) return SHIFTS_WE;
+  return (section||activeSection)==="divisione" ? SHIFTS_DIV : SHIFTS;
+}
 const DOW = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
 const MON = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
@@ -298,6 +327,9 @@ let isEmbed = false;                  // copia "colleghi": giornate passate in s
 function isPastLocked(date){ return isEmbed && toISO(date) < toISO(new Date()); }
 let weekendCollapsed = false;        // colonna Sab/Dom collassata
 function setWeekendCollapsed(v){ weekendCollapsed=!!v; try{ localStorage.setItem("presenze_weekend_collapsed", v?"1":"0"); }catch{} render(); }
+let activeSection = "produzione";    // scheda attiva: "produzione" | "divisione"
+try{ const s=localStorage.getItem("presenze_section"); if(s==="produzione"||s==="divisione") activeSection=s; }catch{}
+function setSection(s){ if(s!==activeSection){ activeSection=s; try{ localStorage.setItem("presenze_section",s); }catch{} expandedKey=null; fillAddMenus(); render(); } }
 
 /* ====== Util ====== */
 const $ = id => document.getElementById(id);
@@ -342,6 +374,7 @@ const G192_HOURS="6:30–14:40";
 function effShift(worker,rec,date){
   if(isWeekend(date)) return rec.shift==="work" ? "work" : "home";   // default: a casa
   const absent=isAbsentStatus(rec.status||"PRESENTE");
+  if(sectionOf(worker.deptId)==="divisione") return absent ? "absent" : "present";  // niente turno
   if(isNoShift(worker)) return absent ? "absent" : "morning";
   if(isG192(worker,rec)) return absent ? "absent" : "morning";       // G192: sempre mattina
   if(rec.shift==="morning"||rec.shift==="afternoon"||rec.shift==="absent") return rec.shift;
@@ -356,10 +389,22 @@ function splitGroups(items,shiftId){
     if(g.length) groups.push({ label:"Turno G192", hours:G192_HOURS, items:g });
   }
   for(const d of DEPTS){
+    if(d.section!=="produzione") continue;
     let inDept=items.filter(x=>x.worker.deptId===d.id);
     if(shiftId==="morning") inDept=inDept.filter(x=>!isG192(x.worker,x.rec));
     if(!inDept.length) continue;
     groups.push({ label:d.name, hours:hoursFor(d.id,shiftId), items:inDept });
+  }
+  return groups;
+}
+/* Gruppi per la scheda "Resto Divisione" (per area, orario fisso) */
+function divGroups(items){
+  const groups=[];
+  for(const d of DEPTS){
+    if(d.section!=="divisione") continue;
+    const inDept=items.filter(x=>x.worker.deptId===d.id);
+    if(!inDept.length) continue;
+    groups.push({ label:d.name, hours:d.hours||"8:00–16:20", items:inDept });
   }
   return groups;
 }
@@ -553,6 +598,7 @@ function placementText(worker,rec,date){
   const sh=effShift(worker,rec,date);
   let base;
   if(sh==="absent") base=statusLabel(st);
+  else if(sh==="present") base="Al lavoro (8:00–16:20)";
   else if(sh==="home") base="A casa";
   else if(sh==="work") base="Al lavoro";
   else if(sh==="morning"){
@@ -616,13 +662,15 @@ function pdfNameLine(it){
 function downloadDailyPDF(){
   const date=new Date();                 // PDF di OGGI
   const iso=toISO(date), wk=getISOWeekKey(date);
+  const secLabel=(SECTIONS.find(s=>s.id===activeSection)?.label)||"";
   const cmd=[]; let y=46;
-  pdfText(cmd,40,y,16,true,"Presenze Divisione"); y+=20;
+  pdfText(cmd,40,y,16,true,"Presenze — "+secLabel); y+=20;
   pdfText(cmd,40,y,12,false,dateLabelIT(date)); y+=24;
 
   const shifts=shiftsFor(date);
   const buckets={}; for(const s of shifts) buckets[s.id]=[];
   for(const w of data.workers){
+    if(sectionOf(w.deptId)!==activeSection) continue;
     const rec=getRec(wk,iso,w.id);
     const it={worker:w,rec,_date:date};
     (buckets[effShift(w,rec,date)]||buckets[shifts[shifts.length-1].id]).push(it);
@@ -643,7 +691,7 @@ function downloadDailyPDF(){
     }
     y+=8;
   }
-  downloadBlob(`Presenze_${iso}.pdf`, buildPdf(cmd.join("\n")+"\n"), "application/pdf");
+  downloadBlob(`Presenze_${activeSection}_${iso}.pdf`, buildPdf(cmd.join("\n")+"\n"), "application/pdf");
   ioMsg("PDF giornaliero scaricato");
 }
 
@@ -706,12 +754,14 @@ function downloadWeeklyExcel(){
   const days=weekDates(fromISO(anchorISO)).filter(d=>!isWeekend(d));   // esclude Sab/Dom
   const wkKey=getISOWeekKey(fromISO(anchorISO));
   const dd=d=>pad(d.getDate())+"/"+pad(d.getMonth()+1);
+  const secLabel=(SECTIONS.find(s=>s.id===activeSection)?.label)||"";
   const rows=[];
-  rows.push([{t:"Prospetto settimanale — Settimana "+wkKey, bold:true}]);
+  rows.push([{t:"Prospetto settimanale ("+secLabel+") — Settimana "+wkKey, bold:true}]);
   const header=[{t:"Nominativo", bold:true}];
   days.forEach((d,i)=>header.push({t:DOW[i]+" "+dd(d), bold:true}));
   rows.push(header);
   for(const dpt of DEPTS){
+    if(dpt.section!==activeSection) continue;
     const list=sortLeaderFirst(data.workers.filter(w=>w.deptId===dpt.id).map(w=>({worker:w})));
     if(!list.length) continue;
     rows.push([{t:dpt.name, bold:true}]);
@@ -726,7 +776,7 @@ function downloadWeeklyExcel(){
       rows.push(row);
     }
   }
-  downloadBlob(`Prospetto_${wkKey}.xlsx`, buildXlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  downloadBlob(`Prospetto_${activeSection}_${wkKey}.xlsx`, buildXlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   ioMsg("Excel settimanale scaricato");
 }
 
@@ -837,7 +887,21 @@ function changeStatus(wid,iso,status){
 }
 
 /* ====== Render ====== */
+function renderTabs(){
+  const t=$("tabs"); if(!t) return; t.innerHTML="";
+  for(const s of SECTIONS){
+    const b=document.createElement("button"); b.type="button"; b.textContent=s.label;
+    if(s.id===activeSection) b.classList.add("active");
+    b.addEventListener("click",()=>setSection(s.id));
+    t.appendChild(b);
+  }
+  const sub=$("subTitle");
+  if(sub) sub.textContent = activeSection==="divisione"
+    ? "Resto Divisione (orario fisso 8:00–16:20). Trascina i badge tra Al lavoro e Assenze. Salvataggio automatico."
+    : "Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.";
+}
 function render(){
+  renderTabs();
   renderWeekLabel();
   renderWeek();
   $("jsStatus").textContent = "OK";
@@ -870,10 +934,11 @@ function buildDayColumn(date, todayISO){
   head.innerHTML=`<div class="dow">${DOW[(date.getDay()+6)%7]}</div><div class="dnum">${date.getDate()} ${MON[date.getMonth()]}</div>`;
   col.appendChild(head);
 
-  // buckets per turno (feriale: mattina/pomeriggio/assenze · weekend: al lavoro/a casa)
+  // buckets per turno (feriale: mattina/pomeriggio/assenze · weekend: al lavoro/a casa · divisione: al lavoro/assenze)
   const shifts=shiftsFor(date);
   const buckets={}; for(const s of shifts) buckets[s.id]=[];
   for(const w of data.workers){
+    if(sectionOf(w.deptId)!==activeSection) continue;   // mostra solo gli operatori della scheda attiva
     const rec=getRec(wk,iso,w.id);
     const sh=effShift(w,rec,date);
     (buckets[sh]||buckets[shifts[shifts.length-1].id]).push({ worker:w, rec });
@@ -891,9 +956,9 @@ function buildDayColumn(date, todayISO){
     const sBody=document.createElement("div"); sBody.className="shiftBody";
     const items=buckets[sh.id];
 
-    if(sh.split){
-      // gruppi: G192 / Area Senza Turno / Area Prestampa / Reparto Stampa (solo non vuoti)
-      const groups=splitGroups(items,sh.id);
+    if(sh.split || sh.group==="div"){
+      // gruppi per reparto/area (solo quelli non vuoti)
+      const groups = sh.split ? splitGroups(items,sh.id) : divGroups(items);
       for(const g of groups){
         const grp=document.createElement("div"); grp.className="deptGroup";
         const nm=document.createElement("div"); nm.className="deptName";
@@ -1101,7 +1166,8 @@ function setupDnD(){
 /* ====== Aggiungi operaio ====== */
 function fillAddMenus(){
   const ad=$("addDept"); ad.innerHTML="";
-  for(const d of DEPTS){ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; if(d.id==="P") o.selected=true; ad.appendChild(o); }
+  const list=DEPTS.filter(d=>d.section===activeSection);
+  list.forEach((d,i)=>{ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; if(i===0||d.id==="P") o.selected=true; ad.appendChild(o); });
 }
 function addWorker(){
   const name=normName($("addName").value);
