@@ -57,6 +57,7 @@
   .badge:active{ cursor:grabbing; }
   .badge.dragging{ opacity:.4; }
   .badge.leader{ border-color:#e6edf3; }
+  .badge.nodrag{ cursor:default; }
   .badge.open{ background:rgba(255,255,255,.06); }
   /* cambio turno: badge spostato in un turno diverso da quello automatico */
   .badge.changed{ background:rgba(255,107,107,.22); border-color:rgba(255,107,107,.6); }
@@ -85,6 +86,7 @@
   .moveBtns{ display:flex; gap:4px; flex-wrap:wrap; }
   .moveBtns button{ font-size:10px; padding:4px 6px; flex:1; }
   .moveBtns button.cur{ outline:2px solid rgba(255,255,255,.4); }
+  .fixedNote{ font-size:11px; color:var(--muted); text-align:center; padding:4px 2px; border:1px dashed var(--line); border-radius:8px; }
   .anaBox{ border-top:1px dashed var(--line); padding-top:6px; display:flex; flex-direction:column; gap:6px; }
 
   /* ===== Add worker ===== */
@@ -136,9 +138,9 @@
 <!-- Anagrafica predefinita -->
 <script>
 window.HARD_WORKERS = [
-  { id:"stefano_ancillai",     name:"Stefano Ancillai",     deptId:"P", baseTeam:"A", isLeader:true, isChief:true },
-  { id:"floriana_de_rosa",     name:"Floriana De Rosa",     deptId:"P", baseTeam:"A", isLeader:false },
-  { id:"annamaria_biscetti",   name:"Annamaria Biscetti",   deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"stefano_ancillai",     name:"Stefano Ancillai",     deptId:"N", baseTeam:"A", isLeader:true, isChief:true },
+  { id:"floriana_de_rosa",     name:"Floriana De Rosa",     deptId:"N", baseTeam:"A", isLeader:false },
+  { id:"annamaria_biscetti",   name:"Annamaria Biscetti",   deptId:"N", baseTeam:"A", isLeader:false },
   { id:"claudio_piccialuti",   name:"Claudio Piccialuti",   deptId:"P", baseTeam:"B", isLeader:false },
   { id:"davide_forcellini",    name:"Davide Forcellini",    deptId:"P", baseTeam:"A", isLeader:false },
   { id:"carlo_cubito",         name:"Carlo Cubito",         deptId:"P", baseTeam:"B", isLeader:false },
@@ -162,17 +164,23 @@ window.HARD_WORKERS = [
 
 /* ====== Costanti ====== */
 /* Due reparti: Area Prestampa (ex Prestampa + Revisione) e Reparto Stampa (ex Stampa + Allestimento) */
+/* Aree: Senza Turno (orario fisso 8-16:20), Area Prestampa, Reparto Stampa */
 const DEPTS = [
+  { id:"N", name:"Area Senza Turno", hours:"8:00–16:20", fixedMorning:true },
   { id:"P", name:"Area Prestampa" },
   { id:"S", name:"Reparto Stampa" },
 ];
 function mapDept(old){
   const o=String(old||"").toUpperCase();
+  if(o==="N") return "N";                          // Senza Turno
   if(o==="S"||o==="B"||o==="C") return "S";       // Stampa, Allestimento -> Reparto Stampa
   return "P";                                      // Prestampa, Revisione, default -> Area Prestampa
 }
 /* Operai rimossi definitivamente dalla compagine (filtrati anche dai dati salvati) */
 const REMOVED_IDS = new Set(["roberto_benvenuti","leonardo_forti"]);
+/* Operai dell'Area Senza Turno (sempre mattina, nessun cambio turno) */
+const SENZA_TURNO_IDS = new Set(["stefano_ancillai","annamaria_biscetti","floriana_de_rosa"]);
+function isNoShift(worker){ return worker && worker.deptId==="N"; }
 const STATUS = [
   { id:"PRESENTE",              label:"Presente" },
   { id:"DELOCALIZZATO",         label:"Delocalizzato" },
@@ -232,9 +240,13 @@ function isEvenWeek(date){ return (getISOWeekNumber(date)%2)===0; }
 /* Alternanza: settimana pari -> mattina A, dispari -> mattina B */
 function isMorningTeam(team,date){ return team === (isEvenWeek(date) ? "A" : "B"); }
 /* Turno automatico secondo l'alternanza squadre (settimana pari -> mattina A, dispari -> B) */
-function autoWorkShift(worker,date){ return isMorningTeam(worker.baseTeam,date) ? "morning" : "afternoon"; }
+function autoWorkShift(worker,date){
+  if(isNoShift(worker)) return "morning";          // Area Senza Turno: sempre mattina
+  return isMorningTeam(worker.baseTeam,date) ? "morning" : "afternoon";
+}
 /* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
 function effShift(worker,rec,date){
+  if(isNoShift(worker)) return isAbsentStatus(rec.status||"PRESENTE") ? "absent" : "morning";
   if(rec.shift) return rec.shift;
   if(isAbsentStatus(rec.status||"PRESENTE")) return "absent";
   return autoWorkShift(worker,date);
@@ -295,6 +307,8 @@ async function importJson(file){
 
 /* ====== Move / mutations ====== */
 function moveWorker(wid,iso,shift){
+  const worker=data.workers.find(w=>w.id===wid);
+  if(isNoShift(worker)) return;                    // Area Senza Turno: non si sposta di turno
   const wk=getISOWeekKey(fromISO(iso));
   const rec=getRec(wk,iso,wid);
   const patch={ shift };
@@ -368,11 +382,14 @@ function renderWeek(){
       const items=buckets[sh.id];
 
       if(sh.split){
-        // suddivisione Area Prestampa / Reparto Stampa
+        // suddivisione: Area Senza Turno / Area Prestampa / Reparto Stampa (solo gruppi non vuoti)
         for(const d of DEPTS){
           const inDept=items.filter(x=>x.worker.deptId===d.id);
+          if(!inDept.length) continue;
           const grp=document.createElement("div"); grp.className="deptGroup";
-          const nm=document.createElement("div"); nm.className="deptName"; nm.textContent=d.name; grp.appendChild(nm);
+          const nm=document.createElement("div"); nm.className="deptName";
+          nm.textContent=d.hours ? (d.name+" · "+d.hours) : d.name;
+          grp.appendChild(nm);
           const bb=document.createElement("div"); bb.className="deptBadges";
           for(const it of sortLeaderFirst(inDept)) bb.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
           grp.appendChild(bb);
@@ -396,14 +413,15 @@ function buildBadge(worker,rec,iso,curShift,date){
   const st=rec.status||"PRESENTE";
   const isAbs=isAbsentStatus(st);
   const isDel=!!rec.deloc || st==="DELOCALIZZATO" || st==="TELELAVORO";
+  const fixed=isNoShift(worker);
   // cambio turno: collocato in un turno lavorativo diverso da quello automatico
-  const isChanged=(curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
+  const isChanged=!fixed && (curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
   const key=worker.id+"__"+iso;
   const open=expandedKey===key;
 
   const el=document.createElement("div");
-  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(open?" open":"");
-  el.draggable=true;
+  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(fixed?" nodrag":"")+(open?" open":"");
+  el.draggable=!fixed;
   el.dataset.id=worker.id;
 
   const head=document.createElement("div"); head.className="badgeHead";
@@ -454,15 +472,20 @@ function buildEditor(worker,rec,iso,curShift){
   note.addEventListener("input",()=>setRec(wk,iso,worker.id,{note:clamp(note.value,50)}));
   ed.appendChild(note);
 
-  // sposta (fallback al drag)
-  const mv=document.createElement("div"); mv.className="moveBtns";
-  for(const s of SHIFTS){
-    const b=document.createElement("button"); b.type="button"; b.textContent=s.label;
-    if(s.id===curShift) b.classList.add("cur");
-    b.addEventListener("click",()=>moveWorker(worker.id,iso,s.id));
-    mv.appendChild(b);
+  // sposta (fallback al drag) — non disponibile per l'Area Senza Turno
+  if(isNoShift(worker)){
+    const note=document.createElement("div"); note.className="fixedNote"; note.textContent="Turno fisso · Mattina 8:00–16:20";
+    ed.appendChild(note);
+  }else{
+    const mv=document.createElement("div"); mv.className="moveBtns";
+    for(const s of SHIFTS){
+      const b=document.createElement("button"); b.type="button"; b.textContent=s.label;
+      if(s.id===curShift) b.classList.add("cur");
+      b.addEventListener("click",()=>moveWorker(worker.id,iso,s.id));
+      mv.appendChild(b);
+    }
+    ed.appendChild(mv);
   }
-  ed.appendChild(mv);
 
   // anagrafica
   const ana=document.createElement("div"); ana.className="anaBox";
@@ -568,9 +591,12 @@ function bootstrap(){
     const src=(Array.isArray(old)&&old.length)?old:(window.HARD_WORKERS||[]);
     data.workers=src.map(normWorker);
   }
-  // garantisce il flag Capo Officina e rimuove gli operai eliminati definitivamente
+  // rimuove gli operai eliminati definitivamente, assegna l'Area Senza Turno e il Capo Officina
   data.workers=data.workers.filter(x=>!REMOVED_IDS.has(x.id));
-  for(const x of data.workers){ if(x.id==="stefano_ancillai"){ x.isChief=true; x.deptId="P"; } }
+  for(const x of data.workers){
+    if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N";
+    if(x.id==="stefano_ancillai") x.isChief=true;
+  }
   saveWorkers();
   const wk=loadStore(STORE_WEEK) || loadStore("presenze_divisione_week_v2");
   if(wk && typeof wk==="object") data.week=wk;
