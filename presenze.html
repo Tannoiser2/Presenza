@@ -114,6 +114,13 @@
   .field span{ font-size:11px; color:var(--muted); }
   .status{ padding:6px 16px; font-size:12px; color:var(--muted); }
   .status b{ color:var(--ok); }
+  /* barra stato file dati */
+  .filebanner{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 16px 0; padding:8px 12px; border-radius:10px; font-size:13px; border:1px solid var(--line); }
+  .filebanner:empty{ display:none; }
+  .filebanner.ok{ background:rgba(46,204,113,.14); border-color:rgba(46,204,113,.5); color:#bdeccd; }
+  .filebanner.warn{ background:rgba(246,194,106,.16); border-color:rgba(246,194,106,.6); color:#f6dca0; }
+  .filebanner.info{ background:rgba(255,255,255,.04); color:var(--muted); }
+  .filebanner button{ padding:5px 10px; font-size:12px; }
   .hidden{ display:none !important; }
 </style>
 </head>
@@ -138,6 +145,8 @@
     <button id="resetBtn" class="danger" title="Svuota le scelte della settimana">Reset settimana</button>
   </div>
 </header>
+
+<div id="fileBanner" class="filebanner"></div>
 
 <div class="week" id="week"></div>
 
@@ -364,7 +373,46 @@ async function importJson(file){ importJsonText(await file.text()); ioMsg("dati 
 
 /* ====== File collegato nella cartella (File System Access API) ====== */
 const FSA = (typeof window!=="undefined") && ("showSaveFilePicker" in window);
-let fileHandle=null, fsTimer=null, fsPending=false, fsWriting=false;
+let fileHandle=null, pendingHandle=null, fsTimer=null, fsPending=false, fsWriting=false;
+function renderFileBanner(){
+  const b=$("fileBanner"); if(!b) return;
+  b.className="filebanner"; b.innerHTML="";
+  const mkBtn=(txt,fn)=>{ const x=document.createElement("button"); x.type="button"; x.className="primary"; x.textContent=txt; x.onclick=fn; return x; };
+  if(!FSA){
+    b.classList.add("info");
+    b.textContent="Salvataggio automatico nel browser attivo. Il salvataggio su file richiede Chrome o Edge.";
+    return;
+  }
+  if(fileHandle){
+    b.classList.add("ok");
+    b.appendChild(document.createTextNode("✓ Salvataggio automatico ATTIVO su file: "+fileHandle.name+"  "));
+    b.appendChild(mkBtn("Scollega", fsaUnlink));
+    return;
+  }
+  if(pendingHandle){
+    b.classList.add("warn");
+    b.appendChild(document.createTextNode("⚠ File dati \""+pendingHandle.name+"\" presente. Clic per riattivare il salvataggio automatico:  "));
+    b.appendChild(mkBtn("Riattiva salvataggio", reactivateFile));
+    return;
+  }
+  b.classList.add("info");
+  b.appendChild(document.createTextNode("Vuoi salvare automaticamente in un file nella cartella? "));
+  b.appendChild(mkBtn("Collega file dati", fsaLinkSave));
+  b.appendChild(document.createTextNode(" oppure "));
+  b.appendChild(mkBtn("Apri file esistente", fsaLinkOpen));
+}
+async function reactivateFile(){
+  if(!pendingHandle) return;
+  try{
+    if((await pendingHandle.requestPermission({mode:"readwrite"}))==="granted"){
+      fileHandle=pendingHandle; pendingHandle=null;
+      try{ const f=await fileHandle.getFile(); if(f.size>0) importJsonText(await f.text()); }catch{}
+      setLinkStatus("file collegato: "+fileHandle.name+" — salvataggio automatico");
+      renderFileBanner();
+    }
+  }catch(e){ const m=fsaError(e); if(m) setLinkStatus("errore: "+m); }
+}
+async function fsaUnlink(){ fileHandle=null; pendingHandle=null; try{ await idbDel("dataFile"); }catch{} setLinkStatus("file scollegato"); renderFileBanner(); }
 function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open("presenze_fs",1); r.onupgradeneeded=()=>r.result.createObjectStore("h"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function idbSet(k,v){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("h","readwrite"); t.objectStore("h").put(v,k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
 async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("h","readonly"); const q=t.objectStore("h").get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
@@ -381,7 +429,9 @@ async function flushFileWrite(){
   if(!fileHandle||fsWriting||!fsPending) return;
   fsWriting=true; fsPending=false;
   try{
-    if((await fileHandle.queryPermission({mode:"readwrite"}))!=="granted"){ fsWriting=false; return; }
+    if((await fileHandle.queryPermission({mode:"readwrite"}))!=="granted"){
+      pendingHandle=fileHandle; fileHandle=null; fsWriting=false; renderFileBanner(); return;
+    }
     const w=await fileHandle.createWritable();
     await w.write(JSON.stringify(buildPayload(),null,2));
     await w.close();
@@ -398,10 +448,11 @@ function fsaError(e){
 async function fsaLinkSave(){
   try{
     const h=await window.showSaveFilePicker({ suggestedName:"presenze_data.json", types:[{description:"Dati Presenze (JSON)",accept:{"application/json":[".json"]}}] });
-    fileHandle=h; await idbSet("dataFile",h);
+    fileHandle=h; pendingHandle=null; await idbSet("dataFile",h);
     fsPending=true; await flushFileWrite();
     setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
   }catch(e){ const m=fsaError(e); if(m) setLinkStatus("errore: "+m); }
+  renderFileBanner();
 }
 async function fsaLinkOpen(){
   try{
@@ -410,30 +461,26 @@ async function fsaLinkOpen(){
     if(p!=="granted") p=await h.requestPermission({mode:"readwrite"});
     const f=await h.getFile();
     if(f.size>0) importJsonText(await f.text());
-    fileHandle=h; await idbSet("dataFile",h);
+    fileHandle=h; pendingHandle=null; await idbSet("dataFile",h);
     setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
     ioMsg("dati caricati dal file");
   }catch(e){ const m=fsaError(e); if(m){ setLinkStatus("errore: "+m); alert("Errore: "+m); } }
+  renderFileBanner();
 }
 async function fsaReconnect(){
-  if(!FSA){ return; }
-  let h; try{ h=await idbGet("dataFile"); }catch{ return; }
-  if(!h){ setLinkStatus("nessun file collegato — usa 'Apri file' o 'Collega file'"); return; }
+  if(!FSA){ renderFileBanner(); return; }
+  let h; try{ h=await idbGet("dataFile"); }catch{ renderFileBanner(); return; }
+  if(!h){ renderFileBanner(); return; }
   try{
     if((await h.queryPermission({mode:"readwrite"}))==="granted"){
       fileHandle=h;
       try{ const f=await h.getFile(); if(f.size>0) importJsonText(await f.text()); }catch{}
       setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
     }else{
-      setLinkStatus("clic per ricollegare il file: "+h.name, async()=>{
-        if((await h.requestPermission({mode:"readwrite"}))==="granted"){
-          fileHandle=h;
-          try{ const f=await h.getFile(); if(f.size>0) importJsonText(await f.text()); }catch{}
-          setLinkStatus("file collegato: "+h.name+" — salvataggio automatico"); render();
-        }
-      });
+      pendingHandle=h;   // serve un clic per riattivare (lo mostra la barra in alto)
     }
   }catch(e){}
+  renderFileBanner();
 }
 
 /* ====== Download helper ====== */
