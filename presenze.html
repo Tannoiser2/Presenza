@@ -106,6 +106,7 @@
   .delBtn.on,.g192Btn.on{ opacity:1; filter:none; }
   .delBtn.on:hover,.g192Btn.on:hover{ opacity:.85; }
   .badgeStatus{ font-size:10px; color:var(--muted); margin-top:2px; }
+  .badgeStatusInline{ font-size:10px; font-weight:400; color:var(--muted); }
   .badgeNote{ font-size:10px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
 
   /* ===== Inline editor ===== */
@@ -209,7 +210,7 @@
 <div class="week" id="week"></div>
 
 <div class="addbox">
-  <div class="small" style="font-weight:800; margin-bottom:8px;">Aggiungi operaio</div>
+  <div class="small" id="addTitle" style="font-weight:800; margin-bottom:8px;">Aggiungi operaio</div>
   <div class="addgrid">
     <label class="field"><span>Nome e cognome</span><input id="addName" type="text" placeholder="Mario Rossi" /></label>
     <label class="field"><span>Reparto</span><select id="addDept"></select></label>
@@ -263,8 +264,8 @@ const DEPTS = [
 ];
 /* Schede (tab) della pagina */
 const SECTIONS = [
-  { id:"produzione", label:"Produzione" },
-  { id:"divisione",  label:"Resto Divisione" },
+  { id:"produzione", label:"Area Produzione" },
+  { id:"divisione",  label:"Area Amministrativa" },
 ];
 function sectionOf(deptId){ return (DEPTS.find(d=>d.id===deptId)?.section) || "produzione"; }
 function mapDept(old){
@@ -281,6 +282,7 @@ function isNoShift(worker){ return worker && worker.deptId==="N"; }
 const STATUS = [
   { id:"PRESENTE",              label:"Presente" },
   { id:"TELELAVORO",            label:"Telelavoro" },
+  { id:"DELOCALIZZATO",         label:"Delocalizzato" },
   { id:"ENTRATA_RITARDATA",     label:"Entrata ritardata" },
   { id:"USCITA_ANTICIPATA",     label:"Uscita anticipata" },
   { id:"MALATTIA",              label:"Malattia" },
@@ -344,6 +346,7 @@ function statusLabel(id){ return (STATUS.find(s => s.id === id)?.label) || id; }
 /* Versione abbreviata dello stato, da mostrare in linea dopo il nome */
 const STATUS_SHORT = {
   TELELAVORO:"Telelavoro",
+  DELOCALIZZATO:"Deloc.",
   ENTRATA_RITARDATA:"Entr. rit.",
   USCITA_ANTICIPATA:"Usc. ant.",
   MALATTIA:"Malattia",
@@ -910,8 +913,10 @@ function renderTabs(){
   }
   const sub=$("subTitle");
   if(sub) sub.textContent = activeSection==="divisione"
-    ? "Resto Divisione (orario fisso 8:00–16:20). Trascina i badge tra Al lavoro e Assenze. Salvataggio automatico."
+    ? "Area Amministrativa (orario fisso 8:00–16:20). Trascina i badge tra Al lavoro e Assenze. Salvataggio automatico."
     : "Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.";
+  const addT=$("addTitle");
+  if(addT) addT.textContent = activeSection==="divisione" ? "Aggiungi operatore" : "Aggiungi operaio";
 }
 function render(){
   renderTabs();
@@ -1046,9 +1051,13 @@ function buildBadge(worker,rec,iso,curShift,date){
   if(worker.isChief){ const s=document.createElement("span"); s.className="chip crown"; s.textContent="👑"; s.title="Capo Officina"; head.appendChild(s); }
   else if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; s.title="Leader"; head.appendChild(s); }
   const nm=document.createElement("span"); nm.className="badgeName";
-  const shortSt=(st!=="PRESENTE") ? statusShort(st) : "";
-  nm.textContent = worker.name + (shortSt ? "  ·  "+shortSt : "");
-  if(shortSt) nm.title = worker.name + " — " + statusLabel(st);
+  nm.appendChild(document.createTextNode(worker.name));
+  if(st!=="PRESENTE"){
+    const ss=document.createElement("span"); ss.className="badgeStatusInline";
+    ss.textContent="  ·  "+statusShort(st);
+    nm.appendChild(ss);
+    nm.title = worker.name + " — " + statusLabel(st);
+  }
   head.appendChild(nm);
   // toggle Turno G192 (solo Reparto Stampa) — mostrato PRIMA del delocalizzato
   if(worker.deptId==="S" && !isWeekend(date)){
