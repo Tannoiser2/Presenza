@@ -30,7 +30,8 @@
   /* ===== Week strip (tutti i giorni) ===== */
   .week{ display:flex; gap:10px; overflow-x:auto; padding:12px 16px 26px; align-items:flex-start; }
   .day{ flex:1 0 215px; min-width:215px; max-width:340px; border:1px solid var(--line); border-radius:14px; background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
-  .day.today{ box-shadow:0 0 0 2px rgba(46,204,113,.45); }
+  .day.today{ box-shadow:0 0 0 2px rgba(46,204,113,.45); background:rgba(46,204,113,.12); }
+  .day.today .dayHead{ background:rgba(46,204,113,.18); }
 
   /* colonna weekend collassabile */
   .weekendWrap{ display:flex; align-items:stretch; gap:10px; flex:0 0 auto; }
@@ -94,18 +95,6 @@
   .delBtn:hover,.g192Btn:hover{ opacity:.6; }
   .delBtn.on,.g192Btn.on{ opacity:1; filter:none; }
   .delBtn.on:hover,.g192Btn.on:hover{ opacity:.85; }
-  /* maniglia "sposta" (tap-to-move, utile su iPad/iPhone) */
-  .moveBtn{ border:none; background:transparent; cursor:pointer; padding:0 2px; font-size:13px; line-height:1; opacity:.3; }
-  .moveBtn:hover{ opacity:.7; }
-  .moveBtn.on{ opacity:1; }
-  .badge.moving{ outline:2px solid #ffd166; outline-offset:1px; box-shadow:0 0 0 3px rgba(255,209,102,.25); }
-  /* in modalità spostamento evidenzia le aree dove si può "posare" l'operaio */
-  .week.movemode .shift{ outline:2px dashed rgba(255,209,102,.55); outline-offset:-3px; cursor:pointer; }
-  .week.movemode .shift .shiftBody{ min-height:26px; }
-  /* barra suggerimento spostamento */
-  .moveHint{ position:fixed; left:50%; transform:translateX(-50%); bottom:14px; z-index:1000; width:calc(100% - 28px); max-width:760px; display:flex; align-items:center; gap:12px; justify-content:space-between; background:#3a2f00; color:#ffe79e; border:1px solid #ffd166; border-radius:12px; padding:12px 16px; font-size:15px; box-shadow:0 8px 24px rgba(0,0,0,.45); }
-  .moveHint.hidden{ display:none; }
-  .moveHint button{ border:none; background:#ffd166; color:#332600; font-weight:800; border-radius:8px; padding:9px 14px; cursor:pointer; white-space:nowrap; }
   .badgeStatus{ font-size:10px; color:var(--muted); margin-top:2px; }
   .badgeNote{ font-size:10px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
 
@@ -207,11 +196,6 @@
 
 <div class="week" id="week"></div>
 
-<div id="moveHint" class="moveHint hidden">
-  <span>✋ Sposto <b id="moveHintName"></b>: tocca <b>Mattina</b>, <b>Pomeriggio</b> o <b>Assenze</b> di un giorno.</span>
-  <button id="moveHintCancel" type="button">Annulla</button>
-</div>
-
 <div class="addbox">
   <div class="small" style="font-weight:800; margin-bottom:8px;">Aggiungi operaio</div>
   <div class="addgrid">
@@ -308,7 +292,6 @@ window.data = data;
 let anchorISO = toISO(new Date());   // un giorno qualsiasi della settimana mostrata
 let expandedKey = null;              // `${workerId}__${dateISO}`
 let dragId = null;
-let moveSelId = null;                 // tap-to-move (touch/iPad): operaio "preso in mano"
 let weekendCollapsed = false;        // colonna Sab/Dom collassata
 function setWeekendCollapsed(v){ weekendCollapsed=!!v; try{ localStorage.setItem("presenze_weekend_collapsed", v?"1":"0"); }catch{} render(); }
 
@@ -931,13 +914,6 @@ function buildDayColumn(date, todayISO){
 
 function renderWeek(){
   const root=$("week"); root.innerHTML="";
-  root.classList.toggle("movemode", !!moveSelId);
-  const mw=moveSelId ? data.workers.find(w=>w.id===moveSelId) : null;
-  const hint=$("moveHint");
-  if(hint){
-    hint.classList.toggle("hidden", !mw);
-    if(mw) $("moveHintName").textContent=mw.name;
-  }
   const todayISO=toISO(new Date());
   const weekendCols=[];
   for(const date of weekDates(fromISO(anchorISO))){
@@ -971,27 +947,11 @@ function buildBadge(worker,rec,iso,curShift,date){
   const open=expandedKey===key;
 
   const el=document.createElement("div");
-  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(fixed?" nodrag":"")+(open?" open":"")+(moveSelId===worker.id?" moving":"")+(isDel?" isDeloc":"");
+  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(fixed?" nodrag":"")+(open?" open":"")+(isDel?" isDeloc":"");
   el.draggable=!fixed;
   el.dataset.id=worker.id;
 
   const head=document.createElement("div"); head.className="badgeHead";
-  // maniglia "sposta" (tap-to-move): funziona su iPad/iPhone e col mouse
-  if(!fixed){
-    const mvBtn=document.createElement("button");
-    mvBtn.type="button";
-    mvBtn.className="moveBtn"+(moveSelId===worker.id?" on":"");
-    mvBtn.textContent="✋";
-    mvBtn.title=moveSelId===worker.id?"Annulla spostamento":"Sposta: tocca qui, poi tocca Mattina/Pomeriggio/Assenze";
-    mvBtn.addEventListener("mousedown",e=>e.stopPropagation());
-    mvBtn.addEventListener("click",e=>{
-      e.stopPropagation();
-      if(moveSelId===worker.id){ moveSelId=null; }
-      else{ moveSelId=worker.id; }
-      render();
-    });
-    head.appendChild(mvBtn);
-  }
   if(worker.isChief){ const s=document.createElement("span"); s.className="chip crown"; s.textContent="👑"; s.title="Capo Officina"; head.appendChild(s); }
   else if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; s.title="Leader"; head.appendChild(s); }
   const nm=document.createElement("span"); nm.className="badgeName"; nm.textContent=worker.name; head.appendChild(nm);
@@ -1116,16 +1076,6 @@ function setupDnD(){
     z.classList.remove("dropok");
     if(id) moveWorker(id, z.dataset.date, z.dataset.shift);
   });
-  // tap-to-move (iPad/iPhone): con un operaio "preso in mano", toccare un'area lo sposta lì.
-  // capture=true così intercetta il tocco prima dell'apertura della scheda.
-  root.addEventListener("click",e=>{
-    if(!moveSelId) return;
-    if(e.target.closest(".moveBtn,.delBtn,.g192Btn")) return; // lascia agire i pulsanti del badge
-    const z=e.target.closest(".shift"); if(!z) return;
-    e.preventDefault(); e.stopPropagation();
-    const id=moveSelId; moveSelId=null;
-    moveWorker(id, z.dataset.date, z.dataset.shift);
-  }, true);
 }
 
 /* ====== Aggiungi operaio ====== */
@@ -1202,7 +1152,6 @@ function init(){
     $("resetBtn").addEventListener("click",resetWeek);
     $("addBtn").addEventListener("click",addWorker);
     $("addName").addEventListener("keydown",e=>{ if(e.key==="Enter") addWorker(); });
-    $("moveHintCancel").addEventListener("click",()=>{ moveSelId=null; render(); });
 
     // Cloud (Firebase): modale di configurazione
     const cm=$("cloudModal");
