@@ -3,17 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Presenze Divisione — Settimanale</title>
+<title>Presenze Divisione — Settimana</title>
 <style>
   :root{
     --bg:#0b0f14; --panel:#121826; --panel2:#0f1522;
     --text:#e6edf3; --muted:#9fb0c0; --line:#223044;
-    --m-bar:#1f6feb;          /* mattina  */
-    --p-bar:#f6c26a;          /* pomeriggio */
-    --a-bar:#ff6b6b;          /* assenti  */
-    --m-soft: rgba(31,111,235,0.12);
-    --p-soft: rgba(246,194,106,0.14);
-    --a-soft: rgba(255,107,107,0.14);
+    --m-bar:#1f6feb; --p-bar:#f6c26a; --a-bar:#ff6b6b;
     --ok:#2ecc71;
   }
   *{ box-sizing:border-box; }
@@ -29,66 +24,61 @@
   button.primary{ background:rgba(31,111,235,.18); border-color:rgba(31,111,235,.55); }
   button.danger{ background:#3a1115; border-color:#6b1a22; }
   .toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-
-  /* ===== Week navigation ===== */
   .weeknav{ display:flex; align-items:center; gap:10px; }
-  .weeknav .wklabel{ font-weight:800; font-size:14px; min-width:230px; text-align:center; }
+  .weeknav .wklabel{ font-weight:800; font-size:13px; min-width:240px; text-align:center; line-height:1.25; }
 
-  /* ===== Day tabs ===== */
-  .daytabs{ display:flex; gap:6px; flex-wrap:wrap; padding:12px 16px 0; }
-  .daytab{ border:1px solid var(--line); background:transparent; color:var(--muted); padding:8px 12px; border-radius:12px; font-size:12px; cursor:pointer; line-height:1.1; text-align:center; min-width:64px; }
-  .daytab b{ display:block; font-size:13px; color:var(--text); font-weight:800; }
-  .daytab.active{ background:rgba(31,111,235,.18); border-color:rgba(31,111,235,.55); }
-  .daytab.today{ box-shadow: inset 0 0 0 1px rgba(46,204,113,.5); }
-  .daytab .cnt{ font-size:10px; opacity:.8; }
+  /* ===== Week strip (tutti i giorni) ===== */
+  .week{ display:flex; gap:10px; overflow-x:auto; padding:12px 16px 26px; align-items:flex-start; }
+  .day{ flex:1 0 215px; min-width:215px; max-width:340px; border:1px solid var(--line); border-radius:14px; background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
+  .day.today{ box-shadow:0 0 0 2px rgba(46,204,113,.45); }
+  .dayHead{ padding:9px 10px; text-align:center; border-bottom:1px solid var(--line); background:rgba(255,255,255,.03); }
+  .dayHead .dow{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+  .dayHead .dnum{ font-weight:900; font-size:14px; }
+  .dayBody{ display:flex; flex-direction:column; gap:8px; padding:8px; }
 
-  /* ===== Board ===== */
-  .board{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:12px 16px 28px; }
-  @media (max-width: 900px){ .board{ grid-template-columns:1fr; } }
-  .col{ border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.02); display:flex; flex-direction:column; min-height:160px; }
-  .col.dropok{ outline:2px dashed rgba(255,255,255,.35); outline-offset:-4px; }
-  .colHead{ padding:10px 12px; font-weight:900; letter-spacing:.6px; text-transform:uppercase; font-size:13px; border-radius:14px 14px 0 0; display:flex; justify-content:space-between; align-items:center; }
-  .col.morning   .colHead{ background:var(--m-bar); color:#fff; }
-  .col.afternoon .colHead{ background:var(--p-bar); color:#1b1300; }
-  .col.absent    .colHead{ background:var(--a-bar); color:#330000; }
-  .colHead .n{ font-size:12px; font-weight:800; opacity:.9; }
-  .colBody{ padding:10px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .shift{ border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+  .shiftHead{ padding:6px 9px; font-weight:900; font-size:11px; letter-spacing:.7px; text-transform:uppercase; display:flex; justify-content:space-between; align-items:center; }
+  .shift.morning   .shiftHead{ background:var(--m-bar); color:#fff; }
+  .shift.afternoon .shiftHead{ background:var(--p-bar); color:#1b1300; }
+  .shift.absent    .shiftHead{ background:var(--a-bar); color:#330000; }
+  .shiftHead .n{ font-size:11px; opacity:.9; }
+  .shiftBody{ padding:7px; display:flex; flex-direction:column; gap:7px; min-height:34px; }
+  .shift.dropok .shiftBody{ outline:2px dashed rgba(255,255,255,.5); outline-offset:-3px; border-radius:8px; }
 
-  .deptGroup{ border:1px dashed var(--line); border-radius:10px; padding:6px 8px 8px; }
-  .deptName{ font-size:11px; font-weight:800; letter-spacing:.5px; color:var(--muted); text-transform:uppercase; margin:2px 2px 6px; }
+  .deptGroup .deptName{ font-size:10px; font-weight:800; letter-spacing:.4px; color:var(--muted); text-transform:uppercase; margin:0 2px 4px; display:flex; align-items:center; gap:6px; }
+  .deptGroup .deptName::before{ content:""; flex:1; height:1px; background:var(--line); }
+  .deptGroup .deptName::after{ content:""; flex:1; height:1px; background:var(--line); }
   .deptBadges{ display:flex; flex-direction:column; gap:6px; }
-  .colEmpty{ color:var(--muted); font-size:12px; padding:16px 4px; text-align:center; }
+  .deptGroup + .deptGroup{ margin-top:6px; }
+  .emptyHint{ color:var(--muted); font-size:11px; text-align:center; padding:6px 2px; opacity:.7; }
 
   /* ===== Badge ===== */
-  .badge{ border:1px solid var(--line); border-radius:11px; background:rgba(0,0,0,.18); padding:7px 9px; cursor:grab; user-select:none; }
+  .badge{ border:1px solid var(--line); border-radius:10px; background:rgba(0,0,0,.20); padding:6px 8px; cursor:grab; user-select:none; }
   .badge:active{ cursor:grabbing; }
-  .badge.dragging{ opacity:.45; }
-  .badge.leader{ border-width:2px; border-color:#e6edf3; }
-  .badge.open{ background:rgba(255,255,255,.05); }
-  .col.morning   .badge{ border-left:3px solid var(--m-bar); }
-  .col.afternoon .badge{ border-left:3px solid var(--p-bar); }
-  .col.absent    .badge{ border-left:3px solid var(--a-bar); }
-  .badgeHead{ display:flex; align-items:center; gap:8px; }
-  .badgeName{ font-weight:800; font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .badge.dragging{ opacity:.4; }
+  .badge.leader{ border-color:#e6edf3; }
+  .badge.open{ background:rgba(255,255,255,.06); }
+  .shift.morning   .badge{ border-left:3px solid var(--m-bar); }
+  .shift.afternoon .badge{ border-left:3px solid var(--p-bar); }
+  .shift.absent    .badge{ border-left:3px solid var(--a-bar); }
+  .badgeHead{ display:flex; align-items:center; gap:6px; }
+  .badgeName{ font-weight:700; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .badge.isAbsent .badgeName{ color:var(--a-bar); }
-  .chip{ font-size:10px; font-weight:800; padding:1px 6px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
+  .chip{ font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
   .chip.ct{ color:#ffd36a; }
   .chip.del{ color:#7fd1ff; }
-  .chip.star{ color:#e6edf3; border:none; padding:0; font-size:12px; }
-  .badgeStatus{ font-size:11px; color:var(--muted); margin-top:2px; }
-  .badgeNote{ font-size:11px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
+  .chip.star{ color:#e6edf3; border:none; padding:0; font-size:11px; }
+  .badgeStatus{ font-size:10px; color:var(--muted); margin-top:2px; }
+  .badgeNote{ font-size:10px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
 
   /* ===== Inline editor ===== */
-  .editor{ margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:7px; }
-  .editor .erow{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-  .editor select, .editor input{ font-size:12px; padding:5px 7px; }
-  .editor .grow{ flex:1; min-width:0; }
-  .editor label.ctlab{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); cursor:pointer; }
-  .moveBtns{ display:flex; gap:5px; flex-wrap:wrap; }
-  .moveBtns button{ font-size:11px; padding:4px 8px; }
+  .editor{ margin-top:7px; padding-top:7px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:6px; }
+  .editor select, .editor input{ font-size:12px; padding:5px 6px; width:100%; }
+  .editor label.ctlab{ display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); cursor:pointer; }
+  .moveBtns{ display:flex; gap:4px; flex-wrap:wrap; }
+  .moveBtns button{ font-size:10px; padding:4px 6px; flex:1; }
   .moveBtns button.cur{ outline:2px solid rgba(255,255,255,.4); }
-  .anaBox{ border-top:1px dashed var(--line); padding-top:7px; display:flex; flex-direction:column; gap:6px; }
-  .anaBox .erow select{ flex:1; }
+  .anaBox{ border-top:1px dashed var(--line); padding-top:6px; display:flex; flex-direction:column; gap:6px; }
 
   /* ===== Add worker ===== */
   .addbox{ margin:0 16px 24px; border:1px dashed var(--line); border-radius:12px; padding:12px; background:rgba(255,255,255,.02); }
@@ -96,7 +86,6 @@
   @media (max-width: 760px){ .addgrid{ grid-template-columns:1fr; } }
   .field{ display:flex; flex-direction:column; gap:5px; }
   .field span{ font-size:11px; color:var(--muted); }
-
   .status{ padding:6px 16px; font-size:12px; color:var(--muted); }
   .status b{ color:var(--ok); }
   .hidden{ display:none !important; }
@@ -105,8 +94,8 @@
 <body>
 <header>
   <div>
-    <h1>Presenze Divisione — Settimanale</h1>
-    <div class="small muted">Trascina i badge tra Mattina, Pomeriggio e Assenti. Salvataggio automatico.</div>
+    <h1>Presenze Divisione — Settimana</h1>
+    <div class="small muted">Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.</div>
   </div>
   <div class="weeknav">
     <button id="prevWk" class="ghost" title="Settimana precedente">◀</button>
@@ -122,8 +111,7 @@
   </div>
 </header>
 
-<div class="daytabs" id="dayTabs"></div>
-<div class="board" id="board"></div>
+<div class="week" id="week"></div>
 
 <div class="addbox">
   <div class="small" style="font-weight:800; margin-bottom:8px;">Aggiungi operaio</div>
@@ -141,25 +129,25 @@
 <!-- Anagrafica predefinita -->
 <script>
 window.HARD_WORKERS = [
-  { id:"stefano_ancillai",     name:"Stefano Ancillai",     deptId:"U", baseTeam:"A", isLeader:true  },
-  { id:"floriana_de_rosa",     name:"Floriana De Rosa",     deptId:"U", baseTeam:"A", isLeader:false },
-  { id:"annamaria_biscetti",   name:"Annamaria Biscetti",   deptId:"U", baseTeam:"A", isLeader:false },
-  { id:"leonardo_forti",       name:"Leonardo Forti",       deptId:"A", baseTeam:"B", isLeader:true  },
-  { id:"claudio_piccialuti",   name:"Claudio Piccialuti",   deptId:"A", baseTeam:"B", isLeader:false },
-  { id:"davide_forcellini",    name:"Davide Forcellini",    deptId:"A", baseTeam:"A", isLeader:false },
-  { id:"carlo_cubito",         name:"Carlo Cubito",         deptId:"A", baseTeam:"B", isLeader:false },
-  { id:"roberto_benvenuti",    name:"Roberto Benvenuti",    deptId:"A", baseTeam:"A", isLeader:true  },
-  { id:"fabrizio_lanzi",       name:"Fabrizio Lanzi",       deptId:"A", baseTeam:"A", isLeader:false },
-  { id:"simone_sgalippa",      name:"Simone Sgalippa",      deptId:"A", baseTeam:"A", isLeader:false },
-  { id:"angelo_pannisco",      name:"Angelo Pannisco",      deptId:"A", baseTeam:"B", isLeader:false },
-  { id:"marco_fontana",        name:"Marco Fontana",        deptId:"B", baseTeam:"A", isLeader:true  },
-  { id:"claudio_picchetta",    name:"Claudio Picchetta",    deptId:"B", baseTeam:"A", isLeader:false },
-  { id:"franco_giambenedetti", name:"Franco Giambenedetti", deptId:"B", baseTeam:"B", isLeader:true  },
-  { id:"nicola_cinquepalmi",   name:"Nicola Cinquepalmi",   deptId:"B", baseTeam:"B", isLeader:false },
-  { id:"angelo_panunzi",       name:"Angelo Panunzi",       deptId:"C", baseTeam:"A", isLeader:true  },
-  { id:"luca_ticconi",         name:"Luca Ticconi",         deptId:"C", baseTeam:"A", isLeader:false },
-  { id:"roberto_tomba",        name:"Roberto Tomba",        deptId:"C", baseTeam:"B", isLeader:true  },
-  { id:"vincenzo_saranzotti",  name:"Vincenzo Saranzotti",  deptId:"C", baseTeam:"B", isLeader:false }
+  { id:"stefano_ancillai",     name:"Stefano Ancillai",     deptId:"P", baseTeam:"A", isLeader:true  },
+  { id:"floriana_de_rosa",     name:"Floriana De Rosa",     deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"annamaria_biscetti",   name:"Annamaria Biscetti",   deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"leonardo_forti",       name:"Leonardo Forti",       deptId:"P", baseTeam:"B", isLeader:true  },
+  { id:"claudio_piccialuti",   name:"Claudio Piccialuti",   deptId:"P", baseTeam:"B", isLeader:false },
+  { id:"davide_forcellini",    name:"Davide Forcellini",    deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"carlo_cubito",         name:"Carlo Cubito",         deptId:"P", baseTeam:"B", isLeader:false },
+  { id:"roberto_benvenuti",    name:"Roberto Benvenuti",    deptId:"P", baseTeam:"A", isLeader:true  },
+  { id:"fabrizio_lanzi",       name:"Fabrizio Lanzi",       deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"simone_sgalippa",      name:"Simone Sgalippa",      deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"angelo_pannisco",      name:"Angelo Pannisco",      deptId:"P", baseTeam:"B", isLeader:false },
+  { id:"marco_fontana",        name:"Marco Fontana",        deptId:"S", baseTeam:"A", isLeader:true  },
+  { id:"claudio_picchetta",    name:"Claudio Picchetta",    deptId:"S", baseTeam:"A", isLeader:false },
+  { id:"franco_giambenedetti", name:"Franco Giambenedetti", deptId:"S", baseTeam:"B", isLeader:true  },
+  { id:"nicola_cinquepalmi",   name:"Nicola Cinquepalmi",   deptId:"S", baseTeam:"B", isLeader:false },
+  { id:"angelo_panunzi",       name:"Angelo Panunzi",       deptId:"S", baseTeam:"A", isLeader:true  },
+  { id:"luca_ticconi",         name:"Luca Ticconi",         deptId:"S", baseTeam:"A", isLeader:false },
+  { id:"roberto_tomba",        name:"Roberto Tomba",        deptId:"S", baseTeam:"B", isLeader:true  },
+  { id:"vincenzo_saranzotti",  name:"Vincenzo Saranzotti",  deptId:"S", baseTeam:"B", isLeader:false }
 ];
 </script>
 
@@ -168,12 +156,16 @@ window.HARD_WORKERS = [
 "use strict";
 
 /* ====== Costanti ====== */
+/* Due reparti: Area Prestampa (ex Prestampa + Revisione) e Reparto Stampa (ex Stampa + Allestimento) */
 const DEPTS = [
-  { id:"U", name:"REVISIONE",    type:"single" },
-  { id:"A", name:"PRESTAMPA",    type:"two" },
-  { id:"B", name:"STAMPA",       type:"two" },
-  { id:"C", name:"ALLESTIMENTO", type:"two" },
+  { id:"P", name:"Area Prestampa" },
+  { id:"S", name:"Reparto Stampa" },
 ];
+function mapDept(old){
+  const o=String(old||"").toUpperCase();
+  if(o==="S"||o==="B"||o==="C") return "S";       // Stampa, Allestimento -> Reparto Stampa
+  return "P";                                      // Prestampa, Revisione, default -> Area Prestampa
+}
 const STATUS = [
   { id:"PRESENTE",              label:"Presente" },
   { id:"DELOCALIZZATO",         label:"Delocalizzato" },
@@ -190,21 +182,21 @@ const STATUS = [
 ];
 const ABSENT = new Set(["MALATTIA","LEGGE_104","CONGEDO_ORDINARIO","CONGEDO_SETTIMANALE","CONGEDO_GIORNALIERO","CONGEDO_STRAORDINARIO"]);
 const SHIFTS = [
-  { id:"morning",   label:"Mattina" },
-  { id:"afternoon", label:"Pomeriggio" },
-  { id:"absent",    label:"Assenti" },
+  { id:"morning",   label:"Mattina",    split:true  },
+  { id:"afternoon", label:"Pomeriggio", split:true  },
+  { id:"absent",    label:"Assenze",    split:false },
 ];
 const DOW = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
 const MON = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
-const STORE_WORKERS = "presenze_divisione_workers_v2";
-const STORE_WEEK    = "presenze_divisione_week_v2";
+const STORE_WORKERS = "presenze_divisione_workers_v3";
+const STORE_WEEK    = "presenze_divisione_week_v3";
 
 /* ====== Stato ====== */
 let data = { workers:[], week:{} };
 window.data = data;
-let activeISO = toISO(new Date());
-let expandedId = null;
+let anchorISO = toISO(new Date());   // un giorno qualsiasi della settimana mostrata
+let expandedKey = null;              // `${workerId}__${dateISO}`
 let dragId = null;
 
 /* ====== Util ====== */
@@ -233,11 +225,7 @@ function isEvenWeek(date){ return (getISOWeekNumber(date)%2)===0; }
 /* Alternanza: settimana pari -> mattina A, dispari -> mattina B */
 function isMorningTeam(team,date){ return team === (isEvenWeek(date) ? "A" : "B"); }
 function effectiveTeam(worker,rec){ return rec?.swapTeam ? (worker.baseTeam==="A"?"B":"A") : worker.baseTeam; }
-function autoWorkShift(worker,rec,date){
-  const dept=deptById(worker.deptId);
-  if(!dept || dept.type==="single") return "morning";
-  return isMorningTeam(effectiveTeam(worker,rec),date) ? "morning" : "afternoon";
-}
+function autoWorkShift(worker,rec,date){ return isMorningTeam(effectiveTeam(worker,rec),date) ? "morning" : "afternoon"; }
 /* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
 function effShift(worker,rec,date){
   if(rec.shift) return rec.shift;
@@ -274,14 +262,16 @@ function downloadJson(filename,obj){
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },200);
 }
-function exportJson(){
-  const workers = data.workers.map(w=>({
+function normWorker(w){
+  return {
     id:String(w.id||uuid()), name:normName(w.name||""),
-    deptId:String(w.deptId||"A").toUpperCase(),
+    deptId:mapDept(w.deptId),
     baseTeam:(String(w.baseTeam||"A").toUpperCase()==="B")?"B":"A",
     isLeader:!!w.isLeader
-  }));
-  downloadJson("presenze_data.json", { version:2, exportedAt:new Date().toISOString(), workers, week:data.week||{} });
+  };
+}
+function exportJson(){
+  downloadJson("presenze_data.json", { version:3, exportedAt:new Date().toISOString(), workers:data.workers.map(normWorker), week:data.week||{} });
   ioMsg("salvato presenze_data.json");
 }
 async function importJson(file){
@@ -289,208 +279,196 @@ async function importJson(file){
   try{ obj = JSON.parse(await file.text()); }
   catch(e){ throw new Error("JSON non valido: " + (e?.message||e)); }
   if(!obj || typeof obj!=="object" || !Array.isArray(obj.workers)) throw new Error("File non valido (manca 'workers').");
-  data.workers = obj.workers.map(w=>({
-    id:String(w.id||uuid()), name:normName(w.name||""),
-    deptId:String(w.deptId||"A").toUpperCase(),
-    baseTeam:(String(w.baseTeam||"A").toUpperCase()==="B")?"B":"A",
-    isLeader:!!w.isLeader
-  })).filter(w=>w.name && ["U","A","B","C"].includes(w.deptId));
+  data.workers = obj.workers.map(normWorker).filter(w=>w.name);
   data.week = (obj.week && typeof obj.week==="object") ? obj.week : {};
   saveWorkers(); saveWeek(); render();
   ioMsg("dati caricati");
 }
 
 /* ====== Move / mutations ====== */
-function moveWorker(wid,shift){
-  const date=fromISO(activeISO), wk=getISOWeekKey(date);
-  const rec=getRec(wk,activeISO,wid);
+function moveWorker(wid,iso,shift){
+  const wk=getISOWeekKey(fromISO(iso));
+  const rec=getRec(wk,iso,wid);
   const patch={ shift };
-  // Spostando in un turno lavorativo, se lo stato è di assenza lo riporto a Presente
   if(shift!=="absent" && isAbsentStatus(rec.status||"PRESENTE")) patch.status="PRESENTE";
-  setRec(wk,activeISO,wid,patch);
+  setRec(wk,iso,wid,patch);
   render();
 }
-function changeStatus(wid,status){
-  const date=fromISO(activeISO), wk=getISOWeekKey(date);
+function changeStatus(wid,iso,status){
+  const date=fromISO(iso), wk=getISOWeekKey(date);
   const worker=data.workers.find(w=>w.id===wid);
-  const rec=getRec(wk,activeISO,wid);
+  const rec=getRec(wk,iso,wid);
   const patch={ status };
   if(isAbsentStatus(status)) patch.shift="absent";
-  else if(rec.shift==="absent") patch.shift=autoWorkShift(worker,rec,date); // torna in turno
-  setRec(wk,activeISO,wid,patch);
+  else if(rec.shift==="absent") patch.shift=autoWorkShift(worker,rec,date);
+  setRec(wk,iso,wid,patch);
   render();
 }
 
 /* ====== Render ====== */
 function render(){
   renderWeekLabel();
-  renderDayTabs();
-  renderBoard();
+  renderWeek();
   $("jsStatus").textContent = "OK";
 }
-
 function renderWeekLabel(){
-  const days=weekDates(fromISO(activeISO));
+  const days=weekDates(fromISO(anchorISO));
   const a=days[0], b=days[6];
-  const wk=getISOWeekKey(fromISO(activeISO));
-  const range = `${a.getDate()} ${MON[a.getMonth()]} – ${b.getDate()} ${MON[b.getMonth()]} ${b.getFullYear()}`;
-  $("wkLabel").innerHTML = `Settimana ${wk}<br><span class="small muted">${range}</span>`;
-}
-
-function renderDayTabs(){
-  const wrap=$("dayTabs"); wrap.innerHTML="";
-  const days=weekDates(fromISO(activeISO));
-  const todayISO=toISO(new Date());
-  days.forEach((d,i)=>{
-    const iso=toISO(d), wk=getISOWeekKey(d);
-    const absent=data.workers.reduce((n,w)=>{
-      const rec=getRec(wk,iso,w.id);
-      return n + (effShift(w,rec,d)==="absent" ? 1 : 0);
-    },0);
-    const btn=document.createElement("button");
-    btn.className="daytab" + (iso===activeISO?" active":"") + (iso===todayISO?" today":"");
-    btn.innerHTML=`${DOW[i]}<b>${d.getDate()} ${MON[d.getMonth()]}</b><span class="cnt">${absent?("ass: "+absent):"&nbsp;"}</span>`;
-    btn.addEventListener("click",()=>{ activeISO=iso; expandedId=null; render(); });
-    wrap.appendChild(btn);
-  });
+  const wk=getISOWeekKey(fromISO(anchorISO));
+  $("wkLabel").innerHTML = `Settimana ${wk}<br><span class="small muted">${a.getDate()} ${MON[a.getMonth()]} – ${b.getDate()} ${MON[b.getMonth()]} ${b.getFullYear()}</span>`;
 }
 
 function sortLeaderFirst(list){
-  return list.slice().sort((a,b)=>{
-    const al=a.worker.isLeader?0:1, bl=b.worker.isLeader?0:1;
-    if(al!==bl) return al-bl;
-    return a.worker.name.localeCompare(b.worker.name,"it");
+  return list.slice().sort((x,y)=>{
+    const xl=x.worker.isLeader?0:1, yl=y.worker.isLeader?0:1;
+    if(xl!==yl) return xl-yl;
+    return x.worker.name.localeCompare(y.worker.name,"it");
   });
 }
 
-function renderBoard(){
-  const board=$("board"); board.innerHTML="";
-  const date=fromISO(activeISO), wk=getISOWeekKey(date);
+function renderWeek(){
+  const root=$("week"); root.innerHTML="";
+  const todayISO=toISO(new Date());
+  for(const date of weekDates(fromISO(anchorISO))){
+    const iso=toISO(date), wk=getISOWeekKey(date);
 
-  // classifica ogni operaio nel turno effettivo
-  const buckets={ morning:[], afternoon:[], absent:[] };
-  for(const w of data.workers){
-    const rec=getRec(wk,activeISO,w.id);
-    const sh=effShift(w,rec,date);
-    buckets[sh].push({ worker:w, rec });
-  }
-
-  for(const sh of SHIFTS){
     const col=document.createElement("div");
-    col.className="col "+sh.id;
-    col.dataset.shift=sh.id;
+    col.className="day"+(iso===todayISO?" today":"");
 
-    const head=document.createElement("div");
-    head.className="colHead";
-    head.innerHTML=`<span>${sh.label}</span><span class="n">${buckets[sh.id].length}</span>`;
+    const head=document.createElement("div"); head.className="dayHead";
+    head.innerHTML=`<div class="dow">${DOW[(date.getDay()+6)%7]}</div><div class="dnum">${date.getDate()} ${MON[date.getMonth()]}</div>`;
     col.appendChild(head);
 
-    const body=document.createElement("div");
-    body.className="colBody";
+    // buckets per turno
+    const buckets={ morning:[], afternoon:[], absent:[] };
+    for(const w of data.workers){
+      const rec=getRec(wk,iso,w.id);
+      buckets[effShift(w,rec,date)].push({ worker:w, rec });
+    }
 
-    if(!buckets[sh.id].length){
-      const e=document.createElement("div"); e.className="colEmpty"; e.textContent="— trascina qui —";
-      body.appendChild(e);
-    }else{
-      // raggruppati per reparto
-      for(const d of DEPTS){
-        const inDept=buckets[sh.id].filter(x=>x.worker.deptId===d.id);
-        if(!inDept.length) continue;
-        const grp=document.createElement("div"); grp.className="deptGroup";
-        const nm=document.createElement("div"); nm.className="deptName"; nm.textContent=d.name;
-        grp.appendChild(nm);
-        const bb=document.createElement("div"); bb.className="deptBadges";
-        for(const item of sortLeaderFirst(inDept)) bb.appendChild(buildBadge(item.worker,item.rec,sh.id,date));
-        grp.appendChild(bb);
-        body.appendChild(grp);
+    const body=document.createElement("div"); body.className="dayBody";
+    for(const sh of SHIFTS){
+      const block=document.createElement("div"); block.className="shift "+sh.id;
+      block.dataset.shift=sh.id; block.dataset.date=iso;
+
+      const sHead=document.createElement("div"); sHead.className="shiftHead";
+      sHead.innerHTML=`<span>${sh.label}</span><span class="n">${buckets[sh.id].length}</span>`;
+      block.appendChild(sHead);
+
+      const sBody=document.createElement("div"); sBody.className="shiftBody";
+      const items=buckets[sh.id];
+
+      if(sh.split){
+        // suddivisione Area Prestampa / Reparto Stampa
+        for(const d of DEPTS){
+          const inDept=items.filter(x=>x.worker.deptId===d.id);
+          const grp=document.createElement("div"); grp.className="deptGroup";
+          const nm=document.createElement("div"); nm.className="deptName"; nm.textContent=d.name; grp.appendChild(nm);
+          const bb=document.createElement("div"); bb.className="deptBadges";
+          for(const it of sortLeaderFirst(inDept)) bb.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
+          grp.appendChild(bb);
+          sBody.appendChild(grp);
+        }
+        if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent="— trascina qui —"; sBody.appendChild(e); }
+      }else{
+        if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent="nessuno"; sBody.appendChild(e); }
+        else for(const it of sortLeaderFirst(items)) sBody.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
       }
+
+      block.appendChild(sBody);
+      body.appendChild(block);
     }
     col.appendChild(body);
-    board.appendChild(col);
+    root.appendChild(col);
   }
 }
 
-function buildBadge(worker,rec,curShift,date){
+function buildBadge(worker,rec,iso,curShift,date){
   const st=rec.status||"PRESENTE";
   const isAbs=isAbsentStatus(st);
   const isDel=(st==="DELOCALIZZATO"||st==="TELELAVORO");
   const isCT=!!rec.swapTeam || st==="TURNO_G192";
-  const open=expandedId===worker.id;
+  const key=worker.id+"__"+iso;
+  const open=expandedKey===key;
 
   const el=document.createElement("div");
   el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(open?" open":"");
   el.draggable=true;
   el.dataset.id=worker.id;
 
-  // head
   const head=document.createElement("div"); head.className="badgeHead";
   if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; head.appendChild(s); }
   const nm=document.createElement("span"); nm.className="badgeName"; nm.textContent=worker.name; head.appendChild(nm);
   if(isCT){ const c=document.createElement("span"); c.className="chip ct"; c.textContent="CT"; head.appendChild(c); }
   if(isDel){ const c=document.createElement("span"); c.className="chip del"; c.textContent="DEL"; head.appendChild(c); }
-  head.addEventListener("click",()=>{ expandedId=open?null:worker.id; render(); });
+  head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
   el.appendChild(head);
 
   if(st!=="PRESENTE"){ const s=document.createElement("div"); s.className="badgeStatus"; s.textContent=statusLabel(st); el.appendChild(s); }
   if((rec.note||"").trim()){ const n=document.createElement("div"); n.className="badgeNote"; n.textContent=rec.note.trim(); el.appendChild(n); }
 
-  if(open) el.appendChild(buildEditor(worker,rec,curShift,date));
+  if(open) el.appendChild(buildEditor(worker,rec,iso,curShift));
   return el;
 }
 
-function buildEditor(worker,rec,curShift,date){
-  const wk=getISOWeekKey(date);
+function buildEditor(worker,rec,iso,curShift){
+  const wk=getISOWeekKey(fromISO(iso));
   const ed=document.createElement("div"); ed.className="editor";
-  const stop=e=>e.stopPropagation();
-  ed.addEventListener("click",stop);
+  ed.addEventListener("click",e=>e.stopPropagation());
   ed.draggable=false;
   ed.addEventListener("mousedown",e=>e.stopPropagation());
 
-  // stato + CT
-  const r1=document.createElement("div"); r1.className="erow";
-  const sel=document.createElement("select"); sel.className="grow";
+  // stato
+  const sel=document.createElement("select");
   for(const s of STATUS){ const o=document.createElement("option"); o.value=s.id; o.textContent=s.label; if(s.id===(rec.status||"PRESENTE")) o.selected=true; sel.appendChild(o); }
-  sel.addEventListener("change",()=>changeStatus(worker.id,sel.value));
+  sel.addEventListener("change",()=>changeStatus(worker.id,iso,sel.value));
+  ed.appendChild(sel);
+
+  // CT
   const ctl=document.createElement("label"); ctl.className="ctlab";
   const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!rec.swapTeam;
-  cb.addEventListener("change",()=>{ setRec(wk,activeISO,worker.id,{swapTeam:cb.checked}); render(); });
+  cb.addEventListener("change",()=>{ setRec(wk,iso,worker.id,{swapTeam:cb.checked}); render(); });
   ctl.appendChild(cb); ctl.appendChild(document.createTextNode("CT (cambio turno)"));
-  r1.appendChild(sel); r1.appendChild(ctl); ed.appendChild(r1);
+  ed.appendChild(ctl);
 
   // note
-  const note=document.createElement("input"); note.type="text"; note.className="grow"; note.placeholder="Note…"; note.maxLength=50; note.value=rec.note||"";
-  note.addEventListener("input",()=>setRec(wk,activeISO,worker.id,{note:clamp(note.value,50)}));
-  const r2=document.createElement("div"); r2.className="erow"; r2.appendChild(note); ed.appendChild(r2);
+  const note=document.createElement("input"); note.type="text"; note.placeholder="Note…"; note.maxLength=50; note.value=rec.note||"";
+  note.addEventListener("input",()=>setRec(wk,iso,worker.id,{note:clamp(note.value,50)}));
+  ed.appendChild(note);
 
-  // sposta (fallback al drag, utile su touch)
+  // sposta (fallback al drag)
   const mv=document.createElement("div"); mv.className="moveBtns";
   for(const s of SHIFTS){
     const b=document.createElement("button"); b.type="button"; b.textContent=s.label;
     if(s.id===curShift) b.classList.add("cur");
-    b.addEventListener("click",()=>moveWorker(worker.id,s.id));
+    b.addEventListener("click",()=>moveWorker(worker.id,iso,s.id));
     mv.appendChild(b);
   }
   ed.appendChild(mv);
 
   // anagrafica
   const ana=document.createElement("div"); ana.className="anaBox";
-  const nameInp=document.createElement("input"); nameInp.type="text"; nameInp.className="grow"; nameInp.value=worker.name; nameInp.maxLength=40; nameInp.placeholder="Nome";
+  const nameInp=document.createElement("input"); nameInp.type="text"; nameInp.value=worker.name; nameInp.maxLength=40; nameInp.placeholder="Nome";
   nameInp.addEventListener("input",()=>{ worker.name=normName(nameInp.value); saveWorkers(); });
   nameInp.addEventListener("blur",()=>render());
-  const ar0=document.createElement("div"); ar0.className="erow"; ar0.appendChild(nameInp); ana.appendChild(ar0);
+  ana.appendChild(nameInp);
 
   const deptSel=document.createElement("select");
   for(const d of DEPTS){ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; if(d.id===worker.deptId) o.selected=true; deptSel.appendChild(o); }
   deptSel.addEventListener("change",()=>{ worker.deptId=deptSel.value; saveWorkers(); render(); });
+  ana.appendChild(deptSel);
+
   const teamSel=document.createElement("select");
   teamSel.innerHTML='<option value="A">Squadra A</option><option value="B">Squadra B</option>'; teamSel.value=worker.baseTeam;
   teamSel.addEventListener("change",()=>{ worker.baseTeam=teamSel.value; saveWorkers(); render(); });
+  ana.appendChild(teamSel);
+
   const leadSel=document.createElement("select");
   leadSel.innerHTML='<option value="0">Leader: No</option><option value="1">Leader: Sì</option>'; leadSel.value=worker.isLeader?"1":"0";
   leadSel.addEventListener("change",()=>{ worker.isLeader=(leadSel.value==="1"); saveWorkers(); render(); });
-  const ar1=document.createElement("div"); ar1.className="erow"; ar1.appendChild(deptSel); ar1.appendChild(teamSel); ana.appendChild(ar1);
-  const ar2=document.createElement("div"); ar2.className="erow"; ar2.appendChild(leadSel);
-  const del=document.createElement("button"); del.type="button"; del.className="danger"; del.textContent="Elimina";
+  ana.appendChild(leadSel);
+
+  const del=document.createElement("button"); del.type="button"; del.className="danger"; del.textContent="Elimina operaio";
   del.addEventListener("click",()=>{
     if(!confirm("Eliminare "+worker.name+"?")) return;
     data.workers=data.workers.filter(w=>w.id!==worker.id);
@@ -498,53 +476,53 @@ function buildEditor(worker,rec,curShift,date){
       const days=data.week[k]?.days||{};
       for(const di of Object.keys(days)){ if(days[di]?.[worker.id]) delete days[di][worker.id]; }
     }
-    if(expandedId===worker.id) expandedId=null;
+    if(expandedKey && expandedKey.startsWith(worker.id+"__")) expandedKey=null;
     saveWorkers(); saveWeek(); render();
   });
-  ar2.appendChild(del); ana.appendChild(ar2);
+  ana.appendChild(del);
   ed.appendChild(ana);
 
   return ed;
 }
 
-/* ====== Drag & Drop (delegato sul board) ====== */
+/* ====== Drag & Drop (delegato) ====== */
 function setupDnD(){
-  const board=$("board");
-  board.addEventListener("dragstart",e=>{
+  const root=$("week");
+  root.addEventListener("dragstart",e=>{
     const b=e.target.closest(".badge"); if(!b) return;
     dragId=b.dataset.id;
     e.dataTransfer.effectAllowed="move";
     try{ e.dataTransfer.setData("text/plain",dragId); }catch{}
     b.classList.add("dragging");
   });
-  board.addEventListener("dragend",e=>{
+  root.addEventListener("dragend",e=>{
     const b=e.target.closest(".badge"); if(b) b.classList.remove("dragging");
-    board.querySelectorAll(".col.dropok").forEach(c=>c.classList.remove("dropok"));
+    root.querySelectorAll(".shift.dropok").forEach(c=>c.classList.remove("dropok"));
     dragId=null;
   });
-  board.addEventListener("dragover",e=>{
-    const col=e.target.closest(".col"); if(!col) return;
+  root.addEventListener("dragover",e=>{
+    const z=e.target.closest(".shift"); if(!z) return;
     e.preventDefault(); e.dataTransfer.dropEffect="move";
-    board.querySelectorAll(".col.dropok").forEach(c=>{ if(c!==col) c.classList.remove("dropok"); });
-    col.classList.add("dropok");
+    root.querySelectorAll(".shift.dropok").forEach(c=>{ if(c!==z) c.classList.remove("dropok"); });
+    z.classList.add("dropok");
   });
-  board.addEventListener("dragleave",e=>{
-    const col=e.target.closest(".col");
-    if(col && !col.contains(e.relatedTarget)) col.classList.remove("dropok");
+  root.addEventListener("dragleave",e=>{
+    const z=e.target.closest(".shift");
+    if(z && !z.contains(e.relatedTarget)) z.classList.remove("dropok");
   });
-  board.addEventListener("drop",e=>{
-    const col=e.target.closest(".col"); if(!col) return;
+  root.addEventListener("drop",e=>{
+    const z=e.target.closest(".shift"); if(!z) return;
     e.preventDefault();
     const id=dragId || (()=>{ try{ return e.dataTransfer.getData("text/plain"); }catch{ return null; } })();
-    col.classList.remove("dropok");
-    if(id) moveWorker(id,col.dataset.shift);
+    z.classList.remove("dropok");
+    if(id) moveWorker(id, z.dataset.date, z.dataset.shift);
   });
 }
 
 /* ====== Aggiungi operaio ====== */
 function fillAddMenus(){
   const ad=$("addDept"); ad.innerHTML="";
-  for(const d of DEPTS){ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; if(d.id==="A") o.selected=true; ad.appendChild(o); }
+  for(const d of DEPTS){ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; if(d.id==="P") o.selected=true; ad.appendChild(o); }
 }
 function addWorker(){
   const name=normName($("addName").value);
@@ -557,7 +535,7 @@ function addWorker(){
 
 /* ====== Reset settimana ====== */
 function resetWeek(){
-  const wk=getISOWeekKey(fromISO(activeISO));
+  const wk=getISOWeekKey(fromISO(anchorISO));
   if(!confirm("Svuotare le scelte della settimana "+wk+"? (l'anagrafica resta)")) return;
   delete data.week[wk]; saveWeek(); render();
 }
@@ -565,17 +543,15 @@ function resetWeek(){
 /* ====== Init ====== */
 function bootstrap(){
   const w=loadStore(STORE_WORKERS);
-  if(Array.isArray(w) && w.length){ data.workers=w; }
-  else if(Array.isArray(window.HARD_WORKERS)){
-    data.workers=window.HARD_WORKERS.map(x=>({
-      id:String(x.id||uuid()), name:normName(x.name||""),
-      deptId:String(x.deptId||"A").toUpperCase(),
-      baseTeam:(String(x.baseTeam||"A").toUpperCase()==="B")?"B":"A",
-      isLeader:!!x.isLeader
-    }));
-    saveWorkers();
+  if(Array.isArray(w) && w.length){ data.workers=w.map(normWorker); }
+  else{
+    // prova a migrare dalla versione precedente (v2) o usa l'anagrafica predefinita
+    const old=loadStore("presenze_divisione_workers_v2");
+    const src=(Array.isArray(old)&&old.length)?old:(window.HARD_WORKERS||[]);
+    data.workers=src.map(normWorker);
   }
-  const wk=loadStore(STORE_WEEK);
+  saveWorkers();
+  const wk=loadStore(STORE_WEEK) || loadStore("presenze_divisione_week_v2");
   if(wk && typeof wk==="object") data.week=wk;
 }
 
@@ -584,9 +560,9 @@ function init(){
     bootstrap();
     fillAddMenus();
     setupDnD();
-    $("prevWk").addEventListener("click",()=>{ const d=fromISO(activeISO); d.setDate(d.getDate()-7); activeISO=toISO(d); expandedId=null; render(); });
-    $("nextWk").addEventListener("click",()=>{ const d=fromISO(activeISO); d.setDate(d.getDate()+7); activeISO=toISO(d); expandedId=null; render(); });
-    $("todayBtn").addEventListener("click",()=>{ activeISO=toISO(new Date()); expandedId=null; render(); });
+    $("prevWk").addEventListener("click",()=>{ const d=fromISO(anchorISO); d.setDate(d.getDate()-7); anchorISO=toISO(d); expandedKey=null; render(); });
+    $("nextWk").addEventListener("click",()=>{ const d=fromISO(anchorISO); d.setDate(d.getDate()+7); anchorISO=toISO(d); expandedKey=null; render(); });
+    $("todayBtn").addEventListener("click",()=>{ anchorISO=toISO(new Date()); expandedKey=null; render(); });
     $("saveBtn").addEventListener("click",exportJson);
     $("loadBtn").addEventListener("click",()=>$("fileInput").click());
     $("fileInput").addEventListener("change",async()=>{
