@@ -728,9 +728,16 @@ function cloudStatus(text,cls){ const b=$("cloudBanner"); if(!b) return; b.class
 function getCloudCfg(){ try{ const r=localStorage.getItem(CLOUD_CFG_KEY); return r?JSON.parse(r):null; }catch{ return null; } }
 function getCloudRoom(){ return localStorage.getItem(CLOUD_ROOM_KEY) || "divisione"; }
 function parseFirebaseConfig(text){
-  const s=String(text||"").trim(); if(!s) throw new Error("Configurazione vuota.");
-  const i=s.indexOf("{"), j=s.lastIndexOf("}"); if(i<0||j<0) throw new Error("Configurazione non valida.");
-  const body=s.slice(i,j+1); let cfg;
+  let s=String(text||"").trim(); if(!s) throw new Error("Configurazione vuota.");
+  // normalizza le virgolette "intelligenti" (copia da PDF/email)
+  s=s.replace(/[“”]/g,'"').replace(/[‘’]/g,"'");
+  let body=null;
+  // caso tipico: incolla l'intero snippet con 'const firebaseConfig = { ... }'
+  const m=s.match(/firebaseConfig\s*=\s*(\{[\s\S]*?\})\s*;?/);
+  if(m){ body=m[1]; }
+  else { const i=s.indexOf("{"), j=s.lastIndexOf("}"); if(i>=0&&j>i) body=s.slice(i,j+1); }
+  if(body===null) throw new Error("Configurazione non valida.");
+  let cfg;
   try{ cfg=JSON.parse(body); }catch{ try{ cfg=(new Function("return ("+body+")"))(); }catch(e){ throw new Error("Configurazione non leggibile."); } }
   if(!cfg || !cfg.databaseURL) throw new Error("Manca 'databaseURL' (attiva il Realtime Database).");
   return cfg;
