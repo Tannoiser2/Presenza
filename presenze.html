@@ -41,6 +41,10 @@
   .shift.morning   .shiftHead{ background:var(--m-bar); color:#fff; }
   .shift.afternoon .shiftHead{ background:var(--p-bar); color:#1b1300; }
   .shift.absent    .shiftHead{ background:var(--a-bar); color:#330000; }
+  .shift.work .shiftHead{ background:#2ea043; color:#fff; }
+  .shift.home .shiftHead{ background:#39424f; color:#cfd8e3; }
+  .day.weekend .dayHead{ background:rgba(46,160,67,.12); }
+  .day.weekend .dayHead .dow{ color:#7ee2a0; }
   .shiftHead .n{ font-size:11px; opacity:.9; }
   .shiftBody{ padding:7px; display:flex; flex-direction:column; gap:7px; min-height:34px; }
   .shift.dropok .shiftBody{ outline:2px dashed rgba(255,255,255,.5); outline-offset:-3px; border-radius:8px; }
@@ -64,6 +68,10 @@
   .shift.morning   .badge{ border-left:3px solid var(--m-bar); }
   .shift.afternoon .badge{ border-left:3px solid var(--p-bar); }
   .shift.absent    .badge{ border-left:3px solid var(--a-bar); }
+  .shift.work .badge{ border-left:3px solid #2ea043; }
+  .shift.home .badge{ border-left:3px solid #39424f; }
+  .badge.dim{ opacity:.6; }
+  .badge.dim:hover{ opacity:.85; }
   .badgeHead{ display:flex; align-items:center; gap:6px; }
   .badgeName{ font-weight:700; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .badge.isAbsent .badgeName{ color:var(--a-bar); }
@@ -201,6 +209,13 @@ const SHIFTS = [
   { id:"afternoon", label:"Pomeriggio", split:true  },
   { id:"absent",    label:"Assenze",    split:false },
 ];
+/* Sabato e Domenica: turno unico, due zone (default tutti a casa) */
+const SHIFTS_WE = [
+  { id:"work", label:"Al lavoro", split:false },
+  { id:"home", label:"A casa",    split:false, dim:true },
+];
+function isWeekend(date){ const d=date.getDay(); return d===0 || d===6; }
+function shiftsFor(date){ return isWeekend(date) ? SHIFTS_WE : SHIFTS; }
 const DOW = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
 const MON = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
@@ -246,8 +261,9 @@ function autoWorkShift(worker,date){
 }
 /* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
 function effShift(worker,rec,date){
+  if(isWeekend(date)) return rec.shift==="work" ? "work" : "home";   // default: a casa
   if(isNoShift(worker)) return isAbsentStatus(rec.status||"PRESENTE") ? "absent" : "morning";
-  if(rec.shift) return rec.shift;
+  if(rec.shift==="morning"||rec.shift==="afternoon"||rec.shift==="absent") return rec.shift;
   if(isAbsentStatus(rec.status||"PRESENTE")) return "absent";
   return autoWorkShift(worker,date);
 }
@@ -308,8 +324,9 @@ async function importJson(file){
 /* ====== Move / mutations ====== */
 function moveWorker(wid,iso,shift){
   const worker=data.workers.find(w=>w.id===wid);
-  if(isNoShift(worker)) return;                    // Area Senza Turno: non si sposta di turno
-  const wk=getISOWeekKey(fromISO(iso));
+  const date=fromISO(iso);
+  if(isNoShift(worker) && !isWeekend(date)) return; // Area Senza Turno: fisso solo nei feriali
+  const wk=getISOWeekKey(date);
   const rec=getRec(wk,iso,wid);
   const patch={ shift };
   if(shift!=="absent" && isAbsentStatus(rec.status||"PRESENTE")) patch.status="PRESENTE";
@@ -355,22 +372,25 @@ function renderWeek(){
   for(const date of weekDates(fromISO(anchorISO))){
     const iso=toISO(date), wk=getISOWeekKey(date);
 
+    const weekend=isWeekend(date);
     const col=document.createElement("div");
-    col.className="day"+(iso===todayISO?" today":"");
+    col.className="day"+(iso===todayISO?" today":"")+(weekend?" weekend":"");
 
     const head=document.createElement("div"); head.className="dayHead";
     head.innerHTML=`<div class="dow">${DOW[(date.getDay()+6)%7]}</div><div class="dnum">${date.getDate()} ${MON[date.getMonth()]}</div>`;
     col.appendChild(head);
 
-    // buckets per turno
-    const buckets={ morning:[], afternoon:[], absent:[] };
+    // buckets per turno (feriale: mattina/pomeriggio/assenze · weekend: al lavoro/a casa)
+    const shifts=shiftsFor(date);
+    const buckets={}; for(const s of shifts) buckets[s.id]=[];
     for(const w of data.workers){
       const rec=getRec(wk,iso,w.id);
-      buckets[effShift(w,rec,date)].push({ worker:w, rec });
+      const sh=effShift(w,rec,date);
+      (buckets[sh]||buckets[shifts[shifts.length-1].id]).push({ worker:w, rec });
     }
 
     const body=document.createElement("div"); body.className="dayBody";
-    for(const sh of SHIFTS){
+    for(const sh of shifts){
       const block=document.createElement("div"); block.className="shift "+sh.id;
       block.dataset.shift=sh.id; block.dataset.date=iso;
 
@@ -397,8 +417,8 @@ function renderWeek(){
         }
         if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent="— trascina qui —"; sBody.appendChild(e); }
       }else{
-        if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent="nessuno"; sBody.appendChild(e); }
-        else for(const it of sortLeaderFirst(items)) sBody.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
+        if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent=(sh.id==="absent"?"nessuno":"— trascina qui —"); sBody.appendChild(e); }
+        else for(const it of sortLeaderFirst(items)){ const b=buildBadge(it.worker,it.rec,iso,sh.id,date); if(sh.dim) b.classList.add("dim"); sBody.appendChild(b); }
       }
 
       block.appendChild(sBody);
@@ -413,9 +433,9 @@ function buildBadge(worker,rec,iso,curShift,date){
   const st=rec.status||"PRESENTE";
   const isAbs=isAbsentStatus(st);
   const isDel=!!rec.deloc || st==="DELOCALIZZATO" || st==="TELELAVORO";
-  const fixed=isNoShift(worker);
-  // cambio turno: collocato in un turno lavorativo diverso da quello automatico
-  const isChanged=!fixed && (curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
+  const fixed=isNoShift(worker) && !isWeekend(date);   // turno fisso solo nei feriali
+  // cambio turno: collocato in un turno lavorativo diverso da quello automatico (solo feriali)
+  const isChanged=!fixed && !isWeekend(date) && (curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
   const key=worker.id+"__"+iso;
   const open=expandedKey===key;
 
@@ -472,13 +492,14 @@ function buildEditor(worker,rec,iso,curShift){
   note.addEventListener("input",()=>setRec(wk,iso,worker.id,{note:clamp(note.value,50)}));
   ed.appendChild(note);
 
-  // sposta (fallback al drag) — non disponibile per l'Area Senza Turno
-  if(isNoShift(worker)){
+  // sposta (fallback al drag) — non disponibile per l'Area Senza Turno nei feriali
+  const date=fromISO(iso);
+  if(isNoShift(worker) && !isWeekend(date)){
     const note=document.createElement("div"); note.className="fixedNote"; note.textContent="Turno fisso · Mattina 8:00–16:20";
     ed.appendChild(note);
   }else{
     const mv=document.createElement("div"); mv.className="moveBtns";
-    for(const s of SHIFTS){
+    for(const s of shiftsFor(date)){
       const b=document.createElement("button"); b.type="button"; b.textContent=s.label;
       if(s.id===curShift) b.classList.add("cur");
       b.addEventListener("click",()=>moveWorker(worker.id,iso,s.id));
