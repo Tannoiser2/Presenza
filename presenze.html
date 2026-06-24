@@ -341,6 +341,19 @@ function normName(s){ return String(s ?? "").trim().replace(/\s+/g," "); }
 function clamp(s,n){ const t=String(s ?? ""); return t.length>n ? t.slice(0,n) : t; }
 function deptById(id){ return DEPTS.find(d => d.id === id); }
 function statusLabel(id){ return (STATUS.find(s => s.id === id)?.label) || id; }
+/* Versione abbreviata dello stato, da mostrare in linea dopo il nome */
+const STATUS_SHORT = {
+  TELELAVORO:"Telelavoro",
+  ENTRATA_RITARDATA:"Entr. rit.",
+  USCITA_ANTICIPATA:"Usc. ant.",
+  MALATTIA:"Malattia",
+  LEGGE_104:"L. 104",
+  CONGEDO_ORDINARIO:"Cong. ord.",
+  CONGEDO_SETTIMANALE:"Cong. sett.",
+  CONGEDO_GIORNALIERO:"Cong. giorn.",
+  CONGEDO_STRAORDINARIO:"Cong. str.",
+};
+function statusShort(id){ return STATUS_SHORT[id] || statusLabel(id); }
 function isAbsentStatus(st){ return ABSENT.has(st); }
 
 function mondayOf(d){ const x=new Date(d); const k=(x.getDay()+6)%7; x.setDate(x.getDate()-k); x.setHours(0,0,0,0); return x; }
@@ -1032,7 +1045,11 @@ function buildBadge(worker,rec,iso,curShift,date){
   const head=document.createElement("div"); head.className="badgeHead";
   if(worker.isChief){ const s=document.createElement("span"); s.className="chip crown"; s.textContent="👑"; s.title="Capo Officina"; head.appendChild(s); }
   else if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; s.title="Leader"; head.appendChild(s); }
-  const nm=document.createElement("span"); nm.className="badgeName"; nm.textContent=worker.name; head.appendChild(nm);
+  const nm=document.createElement("span"); nm.className="badgeName";
+  const shortSt=(st!=="PRESENTE") ? statusShort(st) : "";
+  nm.textContent = worker.name + (shortSt ? "  ·  "+shortSt : "");
+  if(shortSt) nm.title = worker.name + " — " + statusLabel(st);
+  head.appendChild(nm);
   // toggle Turno G192 (solo Reparto Stampa) — mostrato PRIMA del delocalizzato
   if(worker.deptId==="S" && !isWeekend(date)){
     const gBtn=document.createElement("button");
@@ -1064,7 +1081,6 @@ function buildBadge(worker,rec,iso,curShift,date){
   if(!locked) head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
   el.appendChild(head);
 
-  if(st!=="PRESENTE"){ const s=document.createElement("div"); s.className="badgeStatus"; s.textContent=statusLabel(st); el.appendChild(s); }
   if((rec.note||"").trim()){ const n=document.createElement("div"); n.className="badgeNote"; n.textContent=rec.note.trim(); el.appendChild(n); }
 
   if(open) el.appendChild(buildEditor(worker,rec,iso,curShift));
