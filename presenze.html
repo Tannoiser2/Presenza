@@ -182,6 +182,7 @@
     <div id="cloudMsg" class="small" style="margin-top:8px; min-height:16px"></div>
     <div class="modalBtns">
       <button id="cloudConnect" class="primary">Attiva condivisione</button>
+      <button id="cloudExport" title="Genera un file già collegato da dare ai colleghi">📤 Copia per i colleghi</button>
       <button id="cloudDisconnect" class="danger">Disattiva</button>
       <button id="cloudClose" class="ghost">Chiudi</button>
     </div>
@@ -777,6 +778,20 @@ function cloudPushRecord(wk,iso,wid){
   try{ const rec=(data.week[wk]&&data.week[wk].days[iso]&&data.week[wk].days[iso][wid])||null; cloudRef.child("week/"+wk+"/days/"+iso+"/"+wid).set(rec); }catch{}
 }
 function cloudRemoveWeek(wk){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("week/"+wk).remove(); }catch{} }
+/* Genera una copia dell'app già collegata al cloud (per i colleghi: aprono e basta) */
+function exportConfiguredCopy(){
+  const cfg=getCloudCfg();
+  if(!cfg){ $("cloudMsg").textContent="Prima incolla la configurazione e premi 'Attiva condivisione', poi genera la copia."; return; }
+  const room=getCloudRoom();
+  const wasOpen=!$("cloudModal").classList.contains("hidden");
+  $("cloudModal").classList.add("hidden");
+  const embed='<script>window.PRESENZE_FB_EMBED='+JSON.stringify({cfg,room})+';<\/script>';
+  let html="<!doctype html>\n"+document.documentElement.outerHTML;
+  html=html.replace(/<head(\s[^>]*)?>/i, m=>m+"\n"+embed);
+  if(wasOpen) $("cloudModal").classList.remove("hidden");
+  downloadBlob("presenze_condiviso.html", html, "text/html;charset=utf-8");
+  $("cloudMsg").textContent="Copia generata: presenze_condiviso.html — invialo ai colleghi.";
+}
 
 /* ====== Move / mutations ====== */
 function moveWorker(wid,iso,shift){
@@ -1139,12 +1154,21 @@ function init(){
         location.reload();
       }catch(e){ $("cloudMsg").textContent="Errore: "+(e?.message||e); }
     });
+    $("cloudExport").addEventListener("click",exportConfiguredCopy);
     $("cloudDisconnect").addEventListener("click",()=>{
       try{ if(cloudRef) cloudRef.off(); }catch{}
       cloudRef=null; cloudSeeded=false;
       localStorage.removeItem(CLOUD_CFG_KEY);
       cloudStatus(""); $("cloudMsg").textContent="Condivisione disattivata.";
     });
+
+    // copia pre-configurata aperta da un collega: usa la configurazione incorporata
+    if(!getCloudCfg() && window.PRESENZE_FB_EMBED && window.PRESENZE_FB_EMBED.cfg){
+      try{
+        localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(window.PRESENZE_FB_EMBED.cfg));
+        localStorage.setItem(CLOUD_ROOM_KEY, window.PRESENZE_FB_EMBED.room||"divisione");
+      }catch{}
+    }
 
     render();
     fsaReconnect();   // ricollega il file dati se già scelto in precedenza
