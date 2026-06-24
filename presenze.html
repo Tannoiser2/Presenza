@@ -84,6 +84,7 @@
   .badgeHead{ display:flex; align-items:center; gap:6px; }
   .badgeName{ font-weight:700; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .badge.isAbsent .badgeName{ color:var(--a-bar); }
+  .badge.isDeloc .badgeName{ opacity:.6; }   /* delocalizzato: nome al 60% */
   .chip{ font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
   .chip.crown{ border:none; padding:0; font-size:12px; }
   .chip.deloc{ border:none; padding:0; font-size:12px; }
@@ -830,6 +831,8 @@ function moveWorker(wid,iso,shift){
   const rec=getRec(wk,iso,wid);
   const patch={ shift };
   if(shift!=="absent" && isAbsentStatus(rec.status||"PRESENTE")) patch.status="PRESENTE";
+  // spostando in Assenze, default a "Congedo ordinario" se non è già un'assenza
+  if(shift==="absent" && !isAbsentStatus(rec.status||"PRESENTE")) patch.status="CONGEDO_ORDINARIO";
   if(isG192(worker,rec) && shift!=="morning") patch.g192=false;   // uscendo dalla mattina si annulla il G192
   setRec(wk,iso,wid,patch);
   render();
@@ -968,7 +971,7 @@ function buildBadge(worker,rec,iso,curShift,date){
   const open=expandedKey===key;
 
   const el=document.createElement("div");
-  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(fixed?" nodrag":"")+(open?" open":"")+(moveSelId===worker.id?" moving":"");
+  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(fixed?" nodrag":"")+(open?" open":"")+(moveSelId===worker.id?" moving":"")+(isDel?" isDeloc":"");
   el.draggable=!fixed;
   el.dataset.id=worker.id;
 
@@ -992,17 +995,7 @@ function buildBadge(worker,rec,iso,curShift,date){
   if(worker.isChief){ const s=document.createElement("span"); s.className="chip crown"; s.textContent="👑"; s.title="Capo Officina"; head.appendChild(s); }
   else if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; s.title="Leader"; head.appendChild(s); }
   const nm=document.createElement("span"); nm.className="badgeName"; nm.textContent=worker.name; head.appendChild(nm);
-  // toggle delocalizzato direttamente sul badge (senza aprire la scheda)
-  const delBtn=document.createElement("button");
-  delBtn.type="button";
-  delBtn.className="delBtn"+(isDel?" on":"");
-  delBtn.textContent="🏠";
-  delBtn.title=isDel?"Delocalizzato: clic per togliere":"Segna come delocalizzato";
-  delBtn.addEventListener("mousedown",e=>e.stopPropagation());
-  delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
-  head.appendChild(delBtn);
-
-  // toggle Turno G192 (solo Reparto Stampa) accanto all'icona delocalizzato
+  // toggle Turno G192 (solo Reparto Stampa) — mostrato PRIMA del delocalizzato
   if(worker.deptId==="S" && !isWeekend(date)){
     const gBtn=document.createElement("button");
     gBtn.type="button";
@@ -1013,6 +1006,17 @@ function buildBadge(worker,rec,iso,curShift,date){
     gBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{g192:!rec.g192}); render(); });
     head.appendChild(gBtn);
   }
+
+  // toggle delocalizzato direttamente sul badge (senza aprire la scheda)
+  const delBtn=document.createElement("button");
+  delBtn.type="button";
+  delBtn.className="delBtn"+(isDel?" on":"");
+  delBtn.textContent="🏠";
+  delBtn.title=isDel?"Delocalizzato: clic per togliere":"Segna come delocalizzato";
+  delBtn.addEventListener("mousedown",e=>e.stopPropagation());
+  delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
+  head.appendChild(delBtn);
+
   head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
   el.appendChild(head);
 
