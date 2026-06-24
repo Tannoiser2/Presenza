@@ -58,6 +58,8 @@
   .badge.dragging{ opacity:.4; }
   .badge.leader{ border-color:#e6edf3; }
   .badge.open{ background:rgba(255,255,255,.06); }
+  /* cambio turno: badge spostato in un turno diverso da quello automatico */
+  .badge.changed{ background:rgba(255,107,107,.22); border-color:rgba(255,107,107,.6); }
   .shift.morning   .badge{ border-left:3px solid var(--m-bar); }
   .shift.afternoon .badge{ border-left:3px solid var(--p-bar); }
   .shift.absent    .badge{ border-left:3px solid var(--a-bar); }
@@ -65,8 +67,8 @@
   .badgeName{ font-weight:700; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .badge.isAbsent .badgeName{ color:var(--a-bar); }
   .chip{ font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
-  .chip.ct{ color:#ffd36a; }
-  .chip.del{ color:#7fd1ff; }
+  .chip.crown{ border:none; padding:0; font-size:12px; }
+  .chip.deloc{ border:none; padding:0; font-size:12px; }
   .chip.star{ color:#e6edf3; border:none; padding:0; font-size:11px; }
   .badgeStatus{ font-size:10px; color:var(--muted); margin-top:2px; }
   .badgeNote{ font-size:10px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
@@ -129,14 +131,12 @@
 <!-- Anagrafica predefinita -->
 <script>
 window.HARD_WORKERS = [
-  { id:"stefano_ancillai",     name:"Stefano Ancillai",     deptId:"P", baseTeam:"A", isLeader:true  },
+  { id:"stefano_ancillai",     name:"Stefano Ancillai",     deptId:"P", baseTeam:"A", isLeader:true, isChief:true },
   { id:"floriana_de_rosa",     name:"Floriana De Rosa",     deptId:"P", baseTeam:"A", isLeader:false },
   { id:"annamaria_biscetti",   name:"Annamaria Biscetti",   deptId:"P", baseTeam:"A", isLeader:false },
-  { id:"leonardo_forti",       name:"Leonardo Forti",       deptId:"P", baseTeam:"B", isLeader:true  },
   { id:"claudio_piccialuti",   name:"Claudio Piccialuti",   deptId:"P", baseTeam:"B", isLeader:false },
   { id:"davide_forcellini",    name:"Davide Forcellini",    deptId:"P", baseTeam:"A", isLeader:false },
   { id:"carlo_cubito",         name:"Carlo Cubito",         deptId:"P", baseTeam:"B", isLeader:false },
-  { id:"roberto_benvenuti",    name:"Roberto Benvenuti",    deptId:"P", baseTeam:"A", isLeader:true  },
   { id:"fabrizio_lanzi",       name:"Fabrizio Lanzi",       deptId:"P", baseTeam:"A", isLeader:false },
   { id:"simone_sgalippa",      name:"Simone Sgalippa",      deptId:"P", baseTeam:"A", isLeader:false },
   { id:"angelo_pannisco",      name:"Angelo Pannisco",      deptId:"P", baseTeam:"B", isLeader:false },
@@ -166,6 +166,8 @@ function mapDept(old){
   if(o==="S"||o==="B"||o==="C") return "S";       // Stampa, Allestimento -> Reparto Stampa
   return "P";                                      // Prestampa, Revisione, default -> Area Prestampa
 }
+/* Operai rimossi definitivamente dalla compagine (filtrati anche dai dati salvati) */
+const REMOVED_IDS = new Set(["roberto_benvenuti","leonardo_forti"]);
 const STATUS = [
   { id:"PRESENTE",              label:"Presente" },
   { id:"DELOCALIZZATO",         label:"Delocalizzato" },
@@ -224,13 +226,13 @@ function getISOWeekNumber(date){ return parseInt(getISOWeekKey(date).split("W")[
 function isEvenWeek(date){ return (getISOWeekNumber(date)%2)===0; }
 /* Alternanza: settimana pari -> mattina A, dispari -> mattina B */
 function isMorningTeam(team,date){ return team === (isEvenWeek(date) ? "A" : "B"); }
-function effectiveTeam(worker,rec){ return rec?.swapTeam ? (worker.baseTeam==="A"?"B":"A") : worker.baseTeam; }
-function autoWorkShift(worker,rec,date){ return isMorningTeam(effectiveTeam(worker,rec),date) ? "morning" : "afternoon"; }
+/* Turno automatico secondo l'alternanza squadre (settimana pari -> mattina A, dispari -> B) */
+function autoWorkShift(worker,date){ return isMorningTeam(worker.baseTeam,date) ? "morning" : "afternoon"; }
 /* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
 function effShift(worker,rec,date){
   if(rec.shift) return rec.shift;
   if(isAbsentStatus(rec.status||"PRESENTE")) return "absent";
-  return autoWorkShift(worker,rec,date);
+  return autoWorkShift(worker,date);
 }
 
 /* ====== Storage (autosave) ====== */
@@ -245,7 +247,7 @@ function ensureDay(weekKey,iso){
 }
 function getRec(weekKey,iso,wid){
   ensureDay(weekKey,iso);
-  return data.week[weekKey].days[iso][wid] || { status:"PRESENTE", swapTeam:false, note:"", shift:null };
+  return data.week[weekKey].days[iso][wid] || { status:"PRESENTE", deloc:false, note:"", shift:null };
 }
 function setRec(weekKey,iso,wid,patch){
   ensureDay(weekKey,iso);
@@ -267,7 +269,8 @@ function normWorker(w){
     id:String(w.id||uuid()), name:normName(w.name||""),
     deptId:mapDept(w.deptId),
     baseTeam:(String(w.baseTeam||"A").toUpperCase()==="B")?"B":"A",
-    isLeader:!!w.isLeader
+    isLeader:!!w.isLeader,
+    isChief:!!w.isChief
   };
 }
 function exportJson(){
@@ -279,7 +282,7 @@ async function importJson(file){
   try{ obj = JSON.parse(await file.text()); }
   catch(e){ throw new Error("JSON non valido: " + (e?.message||e)); }
   if(!obj || typeof obj!=="object" || !Array.isArray(obj.workers)) throw new Error("File non valido (manca 'workers').");
-  data.workers = obj.workers.map(normWorker).filter(w=>w.name);
+  data.workers = obj.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
   data.week = (obj.week && typeof obj.week==="object") ? obj.week : {};
   saveWorkers(); saveWeek(); render();
   ioMsg("dati caricati");
@@ -300,7 +303,7 @@ function changeStatus(wid,iso,status){
   const rec=getRec(wk,iso,wid);
   const patch={ status };
   if(isAbsentStatus(status)) patch.shift="absent";
-  else if(rec.shift==="absent") patch.shift=autoWorkShift(worker,rec,date);
+  else if(rec.shift==="absent") patch.shift=autoWorkShift(worker,date);
   setRec(wk,iso,wid,patch);
   render();
 }
@@ -318,10 +321,11 @@ function renderWeekLabel(){
   $("wkLabel").innerHTML = `Settimana ${wk}<br><span class="small muted">${a.getDate()} ${MON[a.getMonth()]} – ${b.getDate()} ${MON[b.getMonth()]} ${b.getFullYear()}</span>`;
 }
 
+function rankOf(w){ return w.isChief ? 0 : (w.isLeader ? 1 : 2); }   /* Capo Officina sempre primo */
 function sortLeaderFirst(list){
   return list.slice().sort((x,y)=>{
-    const xl=x.worker.isLeader?0:1, yl=y.worker.isLeader?0:1;
-    if(xl!==yl) return xl-yl;
+    const r=rankOf(x.worker)-rankOf(y.worker);
+    if(r!==0) return r;
     return x.worker.name.localeCompare(y.worker.name,"it");
   });
 }
@@ -386,21 +390,22 @@ function renderWeek(){
 function buildBadge(worker,rec,iso,curShift,date){
   const st=rec.status||"PRESENTE";
   const isAbs=isAbsentStatus(st);
-  const isDel=(st==="DELOCALIZZATO"||st==="TELELAVORO");
-  const isCT=!!rec.swapTeam || st==="TURNO_G192";
+  const isDel=!!rec.deloc || st==="DELOCALIZZATO" || st==="TELELAVORO";
+  // cambio turno: collocato in un turno lavorativo diverso da quello automatico
+  const isChanged=(curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
   const key=worker.id+"__"+iso;
   const open=expandedKey===key;
 
   const el=document.createElement("div");
-  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(open?" open":"");
+  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(open?" open":"");
   el.draggable=true;
   el.dataset.id=worker.id;
 
   const head=document.createElement("div"); head.className="badgeHead";
-  if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; head.appendChild(s); }
+  if(worker.isChief){ const s=document.createElement("span"); s.className="chip crown"; s.textContent="👑"; s.title="Capo Officina"; head.appendChild(s); }
+  else if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; s.title="Leader"; head.appendChild(s); }
   const nm=document.createElement("span"); nm.className="badgeName"; nm.textContent=worker.name; head.appendChild(nm);
-  if(isCT){ const c=document.createElement("span"); c.className="chip ct"; c.textContent="CT"; head.appendChild(c); }
-  if(isDel){ const c=document.createElement("span"); c.className="chip del"; c.textContent="DEL"; head.appendChild(c); }
+  if(isDel){ const c=document.createElement("span"); c.className="chip deloc"; c.textContent="🏠"; c.title="Delocalizzato"; head.appendChild(c); }
   head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
   el.appendChild(head);
 
@@ -424,11 +429,11 @@ function buildEditor(worker,rec,iso,curShift){
   sel.addEventListener("change",()=>changeStatus(worker.id,iso,sel.value));
   ed.appendChild(sel);
 
-  // CT
+  // Delocalizzato (flag con iconetta sul badge)
   const ctl=document.createElement("label"); ctl.className="ctlab";
-  const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!rec.swapTeam;
-  cb.addEventListener("change",()=>{ setRec(wk,iso,worker.id,{swapTeam:cb.checked}); render(); });
-  ctl.appendChild(cb); ctl.appendChild(document.createTextNode("CT (cambio turno)"));
+  const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!rec.deloc;
+  cb.addEventListener("change",()=>{ setRec(wk,iso,worker.id,{deloc:cb.checked}); render(); });
+  ctl.appendChild(cb); ctl.appendChild(document.createTextNode("🏠 Delocalizzato"));
   ed.appendChild(ctl);
 
   // note
@@ -550,6 +555,9 @@ function bootstrap(){
     const src=(Array.isArray(old)&&old.length)?old:(window.HARD_WORKERS||[]);
     data.workers=src.map(normWorker);
   }
+  // garantisce il flag Capo Officina e rimuove gli operai eliminati definitivamente
+  data.workers=data.workers.filter(x=>!REMOVED_IDS.has(x.id));
+  for(const x of data.workers){ if(x.id==="stefano_ancillai"){ x.isChief=true; x.deptId="P"; } }
   saveWorkers();
   const wk=loadStore(STORE_WEEK) || loadStore("presenze_divisione_week_v2");
   if(wk && typeof wk==="object") data.week=wk;
