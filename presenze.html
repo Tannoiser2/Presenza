@@ -31,6 +31,15 @@
   .week{ display:flex; gap:10px; overflow-x:auto; padding:12px 16px 26px; align-items:flex-start; }
   .day{ flex:1 0 215px; min-width:215px; max-width:340px; border:1px solid var(--line); border-radius:14px; background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
   .day.today{ box-shadow:0 0 0 2px rgba(46,204,113,.45); }
+
+  /* colonna weekend collassabile */
+  .weekendWrap{ display:flex; align-items:stretch; gap:10px; flex:0 0 auto; }
+  .weekendWrap .handle{ writing-mode:vertical-rl; text-orientation:mixed; cursor:pointer; user-select:none;
+    background:rgba(46,160,67,.15); border:1px solid var(--line); border-radius:12px; padding:10px 7px;
+    font-weight:800; font-size:12px; letter-spacing:.5px; color:#7ee2a0; display:flex; align-items:center; justify-content:center; white-space:nowrap; }
+  .weekendWrap .handle:hover{ background:rgba(46,160,67,.28); }
+  .weekendWrap .wkndDays{ display:flex; gap:10px; }
+  .weekendWrap.collapsed .wkndDays{ display:none; }
   .dayHead{ padding:9px 10px; text-align:center; border-bottom:1px solid var(--line); background:rgba(255,255,255,.03); }
   .dayHead .dow{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
   .dayHead .dnum{ font-weight:900; font-size:14px; }
@@ -119,6 +128,8 @@
     <div class="wklabel" id="wkLabel">—</div>
     <button id="nextWk" class="ghost" title="Settimana successiva">▶</button>
     <button id="todayBtn" class="ghost" title="Vai a oggi">Oggi</button>
+    <button id="pdfBtn" class="ghost" title="Scarica il PDF giornaliero (oggi)">🗎 PDF</button>
+    <button id="xlsBtn" class="ghost" title="Scarica il prospetto settimanale Excel (Lun–Ven)">▦ Excel</button>
   </div>
   <div class="toolbar">
     <button id="saveBtn" class="primary">Salva (JSON)</button>
@@ -228,6 +239,8 @@ window.data = data;
 let anchorISO = toISO(new Date());   // un giorno qualsiasi della settimana mostrata
 let expandedKey = null;              // `${workerId}__${dateISO}`
 let dragId = null;
+let weekendCollapsed = false;        // colonna Sab/Dom collassata
+function setWeekendCollapsed(v){ weekendCollapsed=!!v; try{ localStorage.setItem("presenze_weekend_collapsed", v?"1":"0"); }catch{} render(); }
 
 /* ====== Util ====== */
 const $ = id => document.getElementById(id);
@@ -321,6 +334,153 @@ async function importJson(file){
   ioMsg("dati caricati");
 }
 
+/* ====== Download helper ====== */
+function downloadBlob(filename,data,type){
+  const blob=new Blob([data],{type});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },200);
+}
+
+/* ====== Etichette comuni a PDF / Excel ====== */
+const GIORNI_IT=["Domenica","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato"];
+const MESI_IT=["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+function dateLabelIT(date){ return `${GIORNI_IT[date.getDay()]} ${date.getDate()} ${MESI_IT[date.getMonth()]} ${date.getFullYear()}`; }
+function isDeloc(rec,st){ return !!rec.deloc || st==="DELOCALIZZATO" || st==="TELELAVORO"; }
+/* descrizione collocazione di un operaio in un giorno */
+function placementText(worker,rec,date){
+  const st=rec.status||"PRESENTE";
+  const sh=effShift(worker,rec,date);
+  let base;
+  if(sh==="absent") base=statusLabel(st);
+  else if(sh==="home") base="A casa";
+  else if(sh==="work") base="Al lavoro";
+  else if(sh==="morning") base=isNoShift(worker)?"Mattina (8–16:20)":"Mattina";
+  else if(sh==="afternoon") base="Pomeriggio";
+  else base=sh;
+  const extra=[];
+  if(sh!=="absent" && isDeloc(rec,st)) extra.push("Deloc");
+  if(sh!=="absent" && st!=="PRESENTE" && !isAbsentStatus(st) && st!=="DELOCALIZZATO" && st!=="TELELAVORO") extra.push(statusLabel(st));
+  if((rec.note||"").trim()) extra.push(rec.note.trim());
+  return base + (extra.length?(" — "+extra.join(", ")):"");
+}
+
+/* ====== PDF giornaliero (testo, A4) ====== */
+function pdfLatin1(s){
+  let t=String(s||"");
+  try{ t=t.normalize("NFKD").replace(/[̀-ͯ]/g,""); }catch{}
+  t=t.replace(/’|‘/g,"'").replace(/–|—/g,"-").replace(/…/g,"...").replace(/[·•]/g,"-");
+  let out=""; for(let i=0;i<t.length;i++){ const c=t.charCodeAt(i); out+=(c>255)?"":t[i]; }
+  return out;
+}
+function pdfEsc(s){ return pdfLatin1(s).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)"); }
+function pdfText(cmd,x,yTop,size,bold,text){
+  const y=(841.89-yTop).toFixed(2);
+  cmd.push("BT",`/${bold?"F2":"F1"} ${size} Tf`,`${x.toFixed(2)} ${y} Td`,`(${pdfEsc(text)}) Tj`,"ET");
+}
+function buildPdf(content){
+  const A4W=595.28, A4H=841.89;
+  const bytes=new TextEncoder().encode(content);
+  const objs=[
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A4W} ${A4H}] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>`,
+    `<< /Length ${bytes.length} >>\nstream\n`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"
+  ];
+  let pdf="%PDF-1.4\n"; const off=[0];
+  const addSimple=(i,b)=>{ off[i]=pdf.length; pdf+=`${i} 0 obj\n${b}\nendobj\n`; };
+  const addStream=(i,h,b)=>{ off[i]=pdf.length; pdf+=`${i} 0 obj\n${h}`; let s=""; for(let k=0;k<b.length;k++) s+=String.fromCharCode(b[k]); pdf+=s+"\nendstream\nendobj\n"; };
+  addSimple(1,objs[0]); addSimple(2,objs[1]); addSimple(3,objs[2]); addStream(4,objs[3],bytes); addSimple(5,objs[4]); addSimple(6,objs[5]);
+  const xref=pdf.length;
+  pdf+="xref\n0 7\n0000000000 65535 f \n";
+  for(let i=1;i<=6;i++) pdf+=String(off[i]).padStart(10,"0")+" 00000 n \n";
+  pdf+=`trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  const out=new Uint8Array(pdf.length);
+  for(let i=0;i<pdf.length;i++) out[i]=pdf.charCodeAt(i)&0xff;
+  return out;
+}
+function pdfNameLine(it){
+  const w=it.worker;
+  let s=w.name;
+  if(w.isChief) s="* "+s+" (Capo Officina)";
+  else if(w.isLeader) s="* "+s;
+  const desc=placementText(w,it.rec,it._date);
+  return s + "  —  " + desc;
+}
+function downloadDailyPDF(){
+  const date=new Date();                 // PDF di OGGI
+  const iso=toISO(date), wk=getISOWeekKey(date);
+  const cmd=[]; let y=46;
+  pdfText(cmd,40,y,16,true,"Presenze Divisione"); y+=20;
+  pdfText(cmd,40,y,12,false,dateLabelIT(date)); y+=24;
+
+  const shifts=shiftsFor(date);
+  const buckets={}; for(const s of shifts) buckets[s.id]=[];
+  for(const w of data.workers){
+    const rec=getRec(wk,iso,w.id);
+    const it={worker:w,rec,_date:date};
+    (buckets[effShift(w,rec,date)]||buckets[shifts[shifts.length-1].id]).push(it);
+  }
+  for(const sh of shifts){
+    const items=buckets[sh.id];
+    if(y>800){ pdfText(cmd,40,y,9,false,"(continua…)"); break; }
+    pdfText(cmd,40,y,13,true,sh.label.toUpperCase()+"  ("+items.length+")"); y+=17;
+    if(!items.length){ pdfText(cmd,52,y,10,false,"—"); y+=15; continue; }
+    if(sh.split){
+      for(const d of DEPTS){
+        const inDept=sortLeaderFirst(items.filter(x=>x.worker.deptId===d.id));
+        if(!inDept.length) continue;
+        pdfText(cmd,52,y,11,true,(d.hours?d.name+" ("+d.hours+")":d.name)); y+=14;
+        for(const it of inDept){ if(y>815) break; pdfText(cmd,64,y,10,false,pdfNameLine(it)); y+=13; }
+        y+=4;
+      }
+    }else{
+      for(const it of sortLeaderFirst(items)){ if(y>815) break; pdfText(cmd,52,y,10,false,pdfNameLine(it)); y+=13; }
+    }
+    y+=8;
+  }
+  downloadBlob(`Presenze_${iso}.pdf`, buildPdf(cmd.join("\n")+"\n"), "application/pdf");
+  ioMsg("PDF giornaliero scaricato");
+}
+
+/* ====== Excel settimanale (Lun–Ven, formato .xls HTML) ====== */
+function xmlEsc(s){ return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function downloadWeeklyExcel(){
+  const days=weekDates(fromISO(anchorISO)).filter(d=>!isWeekend(d));   // esclude Sab/Dom
+  const wkKey=getISOWeekKey(fromISO(anchorISO));
+  const dd=d=>pad(d.getDate())+"/"+pad(d.getMonth()+1);
+
+  let h='<html><head><meta charset="UTF-8"></head><body>';
+  h+='<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:Arial;font-size:12px">';
+  h+=`<tr><td colspan="${days.length+1}" style="font-weight:bold;font-size:14px;background:#1f6feb;color:#fff">Prospetto settimanale — Settimana ${wkKey}</td></tr>`;
+  h+='<tr style="background:#dce6f5;font-weight:bold"><td>Nominativo</td>';
+  for(let i=0;i<days.length;i++) h+=`<td>${DOW[i]} ${dd(days[i])}</td>`;
+  h+='</tr>';
+
+  for(const dpt of DEPTS){
+    const list=sortLeaderFirst(data.workers.filter(w=>w.deptId===dpt.id).map(w=>({worker:w})));
+    if(!list.length) continue;
+    h+=`<tr><td colspan="${days.length+1}" style="font-weight:bold;background:#eef2f7">${xmlEsc(dpt.hours?dpt.name+" ("+dpt.hours+")":dpt.name)}</td></tr>`;
+    for(const it of list){
+      const w=it.worker;
+      const nm=(w.isChief?"★ ":(w.isLeader?"• ":""))+w.name+(w.isChief?" (Capo Officina)":"");
+      h+='<tr><td>'+xmlEsc(nm)+'</td>';
+      for(const d of days){
+        const rec=getRec(getISOWeekKey(d),toISO(d),w.id);
+        const txt=placementText(w,rec,d);
+        const absent=effShift(w,rec,d)==="absent";
+        h+=`<td${absent?' style="color:#c00"':''}>${xmlEsc(txt)}</td>`;
+      }
+      h+='</tr>';
+    }
+  }
+  h+='</table></body></html>';
+  downloadBlob(`Prospetto_${wkKey}.xls`, "﻿"+h, "application/vnd.ms-excel");
+  ioMsg("Excel settimanale scaricato");
+}
+
 /* ====== Move / mutations ====== */
 function moveWorker(wid,iso,shift){
   const worker=data.workers.find(w=>w.id===wid);
@@ -366,66 +526,84 @@ function sortLeaderFirst(list){
   });
 }
 
+function buildDayColumn(date, todayISO){
+  const iso=toISO(date), wk=getISOWeekKey(date);
+  const weekend=isWeekend(date);
+  const col=document.createElement("div");
+  col.className="day"+(iso===todayISO?" today":"")+(weekend?" weekend":"");
+
+  const head=document.createElement("div"); head.className="dayHead";
+  head.innerHTML=`<div class="dow">${DOW[(date.getDay()+6)%7]}</div><div class="dnum">${date.getDate()} ${MON[date.getMonth()]}</div>`;
+  col.appendChild(head);
+
+  // buckets per turno (feriale: mattina/pomeriggio/assenze · weekend: al lavoro/a casa)
+  const shifts=shiftsFor(date);
+  const buckets={}; for(const s of shifts) buckets[s.id]=[];
+  for(const w of data.workers){
+    const rec=getRec(wk,iso,w.id);
+    const sh=effShift(w,rec,date);
+    (buckets[sh]||buckets[shifts[shifts.length-1].id]).push({ worker:w, rec });
+  }
+
+  const body=document.createElement("div"); body.className="dayBody";
+  for(const sh of shifts){
+    const block=document.createElement("div"); block.className="shift "+sh.id;
+    block.dataset.shift=sh.id; block.dataset.date=iso;
+
+    const sHead=document.createElement("div"); sHead.className="shiftHead";
+    sHead.innerHTML=`<span>${sh.label}</span><span class="n">${buckets[sh.id].length}</span>`;
+    block.appendChild(sHead);
+
+    const sBody=document.createElement("div"); sBody.className="shiftBody";
+    const items=buckets[sh.id];
+
+    if(sh.split){
+      // suddivisione: Area Senza Turno / Area Prestampa / Reparto Stampa (solo gruppi non vuoti)
+      for(const d of DEPTS){
+        const inDept=items.filter(x=>x.worker.deptId===d.id);
+        if(!inDept.length) continue;
+        const grp=document.createElement("div"); grp.className="deptGroup";
+        const nm=document.createElement("div"); nm.className="deptName";
+        nm.textContent=d.hours ? (d.name+" · "+d.hours) : d.name;
+        grp.appendChild(nm);
+        const bb=document.createElement("div"); bb.className="deptBadges";
+        for(const it of sortLeaderFirst(inDept)) bb.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
+        grp.appendChild(bb);
+        sBody.appendChild(grp);
+      }
+      if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent="— trascina qui —"; sBody.appendChild(e); }
+    }else{
+      if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent=(sh.id==="absent"?"nessuno":"— trascina qui —"); sBody.appendChild(e); }
+      else for(const it of sortLeaderFirst(items)){ const b=buildBadge(it.worker,it.rec,iso,sh.id,date); if(sh.dim) b.classList.add("dim"); sBody.appendChild(b); }
+    }
+
+    block.appendChild(sBody);
+    body.appendChild(block);
+  }
+  col.appendChild(body);
+  return col;
+}
+
 function renderWeek(){
   const root=$("week"); root.innerHTML="";
   const todayISO=toISO(new Date());
+  const weekendCols=[];
   for(const date of weekDates(fromISO(anchorISO))){
-    const iso=toISO(date), wk=getISOWeekKey(date);
-
-    const weekend=isWeekend(date);
-    const col=document.createElement("div");
-    col.className="day"+(iso===todayISO?" today":"")+(weekend?" weekend":"");
-
-    const head=document.createElement("div"); head.className="dayHead";
-    head.innerHTML=`<div class="dow">${DOW[(date.getDay()+6)%7]}</div><div class="dnum">${date.getDate()} ${MON[date.getMonth()]}</div>`;
-    col.appendChild(head);
-
-    // buckets per turno (feriale: mattina/pomeriggio/assenze · weekend: al lavoro/a casa)
-    const shifts=shiftsFor(date);
-    const buckets={}; for(const s of shifts) buckets[s.id]=[];
-    for(const w of data.workers){
-      const rec=getRec(wk,iso,w.id);
-      const sh=effShift(w,rec,date);
-      (buckets[sh]||buckets[shifts[shifts.length-1].id]).push({ worker:w, rec });
-    }
-
-    const body=document.createElement("div"); body.className="dayBody";
-    for(const sh of shifts){
-      const block=document.createElement("div"); block.className="shift "+sh.id;
-      block.dataset.shift=sh.id; block.dataset.date=iso;
-
-      const sHead=document.createElement("div"); sHead.className="shiftHead";
-      sHead.innerHTML=`<span>${sh.label}</span><span class="n">${buckets[sh.id].length}</span>`;
-      block.appendChild(sHead);
-
-      const sBody=document.createElement("div"); sBody.className="shiftBody";
-      const items=buckets[sh.id];
-
-      if(sh.split){
-        // suddivisione: Area Senza Turno / Area Prestampa / Reparto Stampa (solo gruppi non vuoti)
-        for(const d of DEPTS){
-          const inDept=items.filter(x=>x.worker.deptId===d.id);
-          if(!inDept.length) continue;
-          const grp=document.createElement("div"); grp.className="deptGroup";
-          const nm=document.createElement("div"); nm.className="deptName";
-          nm.textContent=d.hours ? (d.name+" · "+d.hours) : d.name;
-          grp.appendChild(nm);
-          const bb=document.createElement("div"); bb.className="deptBadges";
-          for(const it of sortLeaderFirst(inDept)) bb.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
-          grp.appendChild(bb);
-          sBody.appendChild(grp);
-        }
-        if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent="— trascina qui —"; sBody.appendChild(e); }
-      }else{
-        if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent=(sh.id==="absent"?"nessuno":"— trascina qui —"); sBody.appendChild(e); }
-        else for(const it of sortLeaderFirst(items)){ const b=buildBadge(it.worker,it.rec,iso,sh.id,date); if(sh.dim) b.classList.add("dim"); sBody.appendChild(b); }
-      }
-
-      block.appendChild(sBody);
-      body.appendChild(block);
-    }
-    col.appendChild(body);
-    root.appendChild(col);
+    if(isWeekend(date)) weekendCols.push(buildDayColumn(date,todayISO));
+    else root.appendChild(buildDayColumn(date,todayISO));
+  }
+  if(weekendCols.length){
+    const wrap=document.createElement("div");
+    wrap.className="weekendWrap"+(weekendCollapsed?" collapsed":"");
+    const handle=document.createElement("div");
+    handle.className="handle";
+    handle.textContent=(weekendCollapsed?"▸ ":"◂ ")+"Weekend";
+    handle.title=weekendCollapsed ? "Mostra Sabato e Domenica" : "Nascondi Sabato e Domenica";
+    handle.addEventListener("click",()=>setWeekendCollapsed(!weekendCollapsed));
+    const days=document.createElement("div"); days.className="wkndDays";
+    for(const c of weekendCols) days.appendChild(c);
+    wrap.appendChild(handle); wrap.appendChild(days);
+    root.appendChild(wrap);
   }
 }
 
@@ -626,11 +804,14 @@ function bootstrap(){
 function init(){
   try{
     bootstrap();
+    weekendCollapsed = (localStorage.getItem("presenze_weekend_collapsed")==="1");
     fillAddMenus();
     setupDnD();
     $("prevWk").addEventListener("click",()=>{ const d=fromISO(anchorISO); d.setDate(d.getDate()-7); anchorISO=toISO(d); expandedKey=null; render(); });
     $("nextWk").addEventListener("click",()=>{ const d=fromISO(anchorISO); d.setDate(d.getDate()+7); anchorISO=toISO(d); expandedKey=null; render(); });
     $("todayBtn").addEventListener("click",()=>{ anchorISO=toISO(new Date()); expandedKey=null; render(); });
+    $("pdfBtn").addEventListener("click",()=>{ try{ downloadDailyPDF(); }catch(e){ ioMsg("errore PDF: "+(e?.message||e)); } });
+    $("xlsBtn").addEventListener("click",()=>{ try{ downloadWeeklyExcel(); }catch(e){ ioMsg("errore Excel: "+(e?.message||e)); } });
     $("saveBtn").addEventListener("click",exportJson);
     $("loadBtn").addEventListener("click",()=>$("fileInput").click());
     $("fileInput").addEventListener("change",async()=>{
