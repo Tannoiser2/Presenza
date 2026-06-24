@@ -122,9 +122,21 @@
   .filebanner.info{ background:rgba(255,255,255,.04); color:var(--muted); }
   .filebanner button{ padding:5px 10px; font-size:12px; }
   .hidden{ display:none !important; }
+  /* modale cloud */
+  .modalWrap{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
+  .modal{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; width:560px; max-width:100%; max-height:90vh; overflow:auto; }
+  .modalTitle{ font-weight:800; font-size:15px; margin-bottom:4px; }
+  .modal textarea, .modal input{ width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; margin-top:4px; }
+  .modal input{ font-family:inherit; }
+  .modalBtns{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; justify-content:flex-end; }
+  .cloudbadge{ font-size:12px; }
 </style>
 </head>
 <body>
+<!-- Firebase SDK (compat) — caricato da CDN; usato solo se il cloud è configurato -->
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <header>
   <div>
     <h1>Presenze Divisione — Settimana</h1>
@@ -139,6 +151,7 @@
     <button id="xlsBtn" class="ghost" title="Scarica il prospetto settimanale Excel (Lun–Ven)">▦ Excel</button>
   </div>
   <div class="toolbar">
+    <button id="cloudBtn" title="Condivisione online (Firebase)">☁️ Cloud</button>
     <button id="saveBtn" class="primary">Salva (JSON)</button>
     <button id="loadBtn">Carica (JSON)</button>
     <input id="fileInput" type="file" accept=".json,application/json" class="hidden" />
@@ -146,7 +159,34 @@
   </div>
 </header>
 
+<div id="cloudBanner" class="filebanner"></div>
 <div id="fileBanner" class="filebanner"></div>
+
+<!-- Modale configurazione Cloud (Firebase) -->
+<div id="cloudModal" class="modalWrap hidden">
+  <div class="modal">
+    <div class="modalTitle">Condivisione online (Firebase)</div>
+    <p class="small muted" style="margin:6px 0 10px">
+      Incolla qui la configurazione del tuo progetto Firebase (l'oggetto <code>firebaseConfig</code> che trovi nelle impostazioni del progetto). Serve un Realtime Database. Tutti i dispositivi che usano la stessa configurazione e la stessa "stanza" vedono gli stessi dati in tempo reale.
+    </p>
+    <label class="small" style="font-weight:700">Configurazione Firebase</label>
+    <textarea id="cloudCfg" rows="9" placeholder='{
+  "apiKey": "…",
+  "authDomain": "tuo-progetto.firebaseapp.com",
+  "databaseURL": "https://tuo-progetto-default-rtdb.europe-west1.firebasedatabase.app",
+  "projectId": "tuo-progetto",
+  "appId": "…"
+}'></textarea>
+    <label class="small" style="font-weight:700; margin-top:8px; display:block">Stanza (nome condiviso)</label>
+    <input id="cloudRoom" type="text" placeholder="divisione" />
+    <div id="cloudMsg" class="small" style="margin-top:8px; min-height:16px"></div>
+    <div class="modalBtns">
+      <button id="cloudConnect" class="primary">Attiva condivisione</button>
+      <button id="cloudDisconnect" class="danger">Disattiva</button>
+      <button id="cloudClose" class="ghost">Chiudi</button>
+    </div>
+  </div>
+</div>
 
 <div class="week" id="week"></div>
 
@@ -316,7 +356,7 @@ function splitGroups(items,shiftId){
 
 /* ====== Storage (autosave) ====== */
 function loadStore(key){ try{ const r=localStorage.getItem(key); return r ? JSON.parse(r) : null; }catch{ return null; } }
-function saveWorkers(){ try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); }catch{} scheduleFileWrite(); }
+function saveWorkers(){ try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); }catch{} scheduleFileWrite(); cloudPushWorkers(); }
 function saveWeek(){ try{ localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{} scheduleFileWrite(); }
 
 /* ====== Day record ====== */
@@ -333,6 +373,7 @@ function setRec(weekKey,iso,wid,patch){
   const cur = getRec(weekKey,iso,wid);
   data.week[weekKey].days[iso][wid] = { ...cur, ...patch };
   saveWeek();
+  cloudPushRecord(weekKey,iso,wid);
 }
 
 /* ====== JSON import/export ====== */
@@ -367,7 +408,7 @@ function importJsonText(text){
   data.workers = obj.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
   for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
   data.week = (obj.week && typeof obj.week==="object") ? obj.week : {};
-  saveWorkers(); saveWeek(); render();
+  saveWorkers(); saveWeek(); if(cloudSeeded) cloudPushAll(); render();
 }
 async function importJson(file){ importJsonText(await file.text()); ioMsg("dati caricati"); }
 
@@ -679,6 +720,64 @@ function downloadWeeklyExcel(){
   ioMsg("Excel settimanale scaricato");
 }
 
+/* ====== Cloud condiviso (Firebase Realtime Database) ====== */
+const CLOUD_CFG_KEY="presenze_fb_config", CLOUD_ROOM_KEY="presenze_fb_room";
+let cloudRef=null, cloudSeeded=false, applyingRemote=false, pendingRemote=null;
+function cloudStatus(text,cls){ const b=$("cloudBanner"); if(!b) return; b.className="filebanner"+(cls?(" "+cls):""); b.textContent=text||""; }
+function getCloudCfg(){ try{ const r=localStorage.getItem(CLOUD_CFG_KEY); return r?JSON.parse(r):null; }catch{ return null; } }
+function getCloudRoom(){ return localStorage.getItem(CLOUD_ROOM_KEY) || "divisione"; }
+function parseFirebaseConfig(text){
+  const s=String(text||"").trim(); if(!s) throw new Error("Configurazione vuota.");
+  const i=s.indexOf("{"), j=s.lastIndexOf("}"); if(i<0||j<0) throw new Error("Configurazione non valida.");
+  const body=s.slice(i,j+1); let cfg;
+  try{ cfg=JSON.parse(body); }catch{ try{ cfg=(new Function("return ("+body+")"))(); }catch(e){ throw new Error("Configurazione non leggibile."); } }
+  if(!cfg || !cfg.databaseURL) throw new Error("Manca 'databaseURL' (attiva il Realtime Database).");
+  return cfg;
+}
+async function initCloud(){
+  const cfg=getCloudCfg(); if(!cfg){ cloudStatus(""); return; }
+  if(typeof firebase==="undefined" || !firebase.initializeApp){ cloudStatus("☁️ Cloud configurato ma SDK non caricato (serve connessione internet).","warn"); return; }
+  try{
+    if(!firebase.apps || !firebase.apps.length) firebase.initializeApp(cfg);
+    try{ if(firebase.auth) await firebase.auth().signInAnonymously(); }catch(_){}
+    const room=getCloudRoom();
+    cloudRef=firebase.database().ref("rooms/"+room);
+    cloudStatus("☁️ Connessione condivisione…","info");
+    cloudRef.on("value", onCloudValue, err=>cloudStatus("☁️ Errore cloud: "+(err?.message||err),"warn"));
+  }catch(e){ cloudStatus("☁️ Errore cloud: "+(e?.message||e),"warn"); }
+}
+function onCloudValue(snap){
+  const val=snap.val(); const room=getCloudRoom();
+  if(val==null){
+    if(!cloudSeeded){ cloudSeeded=true; cloudPushAll(); cloudStatus("☁️ Condivisione attiva (stanza: "+room+") — dati iniziali inviati","ok"); }
+    return;
+  }
+  cloudSeeded=true;
+  cloudStatus("☁️ Condivisione attiva (stanza: "+room+")","ok");
+  const incoming={ workers: val.workers ? (Array.isArray(val.workers)?val.workers:Object.values(val.workers)) : [], week:(val.week&&typeof val.week==="object")?val.week:{} };
+  if(JSON.stringify({w:data.workers.map(normWorker),k:data.week})===JSON.stringify({w:incoming.workers.map(normWorker),k:incoming.week})) return;
+  if(expandedKey!==null){ pendingRemote=incoming; return; }   // non disturbare durante la modifica
+  applyRemoteNow(incoming);
+}
+function applyRemoteNow(incoming){
+  applyingRemote=true;
+  try{
+    data.workers=incoming.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
+    for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
+    data.week=incoming.week||{};
+    try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{}
+  } finally { applyingRemote=false; }
+  render();
+}
+function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{} }); }catch{} }
+function cloudPushWorkers(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("workers").set(data.workers.map(normWorker)); }catch{} }
+function cloudPushWeek(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("week").set(data.week||{}); }catch{} }
+function cloudPushRecord(wk,iso,wid){
+  if(!cloudRef||applyingRemote||!cloudSeeded) return;
+  try{ const rec=(data.week[wk]&&data.week[wk].days[iso]&&data.week[wk].days[iso][wid])||null; cloudRef.child("week/"+wk+"/days/"+iso+"/"+wid).set(rec); }catch{}
+}
+function cloudRemoveWeek(wk){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("week/"+wk).remove(); }catch{} }
+
 /* ====== Move / mutations ====== */
 function moveWorker(wid,iso,shift){
   const worker=data.workers.find(w=>w.id===wid);
@@ -708,6 +807,8 @@ function render(){
   renderWeekLabel();
   renderWeek();
   $("jsStatus").textContent = "OK";
+  // applica un aggiornamento remoto in coda quando la scheda è chiusa
+  if(expandedKey===null && pendingRemote){ const r=pendingRemote; pendingRemote=null; applyRemoteNow(r); }
 }
 function renderWeekLabel(){
   const days=weekDates(fromISO(anchorISO));
@@ -905,7 +1006,7 @@ function buildEditor(worker,rec,iso,curShift){
       for(const di of Object.keys(days)){ if(days[di]?.[worker.id]) delete days[di][worker.id]; }
     }
     if(expandedKey && expandedKey.startsWith(worker.id+"__")) expandedKey=null;
-    saveWorkers(); saveWeek(); render();
+    saveWorkers(); saveWeek(); cloudPushWeek(); render();
   });
   ana.appendChild(del);
   ed.appendChild(ana);
@@ -965,7 +1066,7 @@ function addWorker(){
 function resetWeek(){
   const wk=getISOWeekKey(fromISO(anchorISO));
   if(!confirm("Svuotare le scelte della settimana "+wk+"? (l'anagrafica resta)")) return;
-  delete data.week[wk]; saveWeek(); render();
+  delete data.week[wk]; saveWeek(); cloudRemoveWeek(wk); render();
 }
 
 /* ====== Init ====== */
@@ -1021,8 +1122,33 @@ function init(){
     $("resetBtn").addEventListener("click",resetWeek);
     $("addBtn").addEventListener("click",addWorker);
     $("addName").addEventListener("keydown",e=>{ if(e.key==="Enter") addWorker(); });
+
+    // Cloud (Firebase): modale di configurazione
+    const cm=$("cloudModal");
+    const openCloud=()=>{ const cfg=getCloudCfg(); $("cloudCfg").value=cfg?JSON.stringify(cfg,null,2):""; $("cloudRoom").value=getCloudRoom(); $("cloudMsg").textContent=getCloudCfg()?"Condivisione configurata.":"Non configurata."; cm.classList.remove("hidden"); };
+    $("cloudBtn").addEventListener("click",openCloud);
+    $("cloudClose").addEventListener("click",()=>cm.classList.add("hidden"));
+    cm.addEventListener("click",e=>{ if(e.target===cm) cm.classList.add("hidden"); });
+    $("cloudConnect").addEventListener("click",()=>{
+      try{
+        const cfg=parseFirebaseConfig($("cloudCfg").value);
+        const room=normName($("cloudRoom").value)||"divisione";
+        localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(cfg));
+        localStorage.setItem(CLOUD_ROOM_KEY, room);
+        $("cloudMsg").textContent="Salvato. Riavvio…";
+        location.reload();
+      }catch(e){ $("cloudMsg").textContent="Errore: "+(e?.message||e); }
+    });
+    $("cloudDisconnect").addEventListener("click",()=>{
+      try{ if(cloudRef) cloudRef.off(); }catch{}
+      cloudRef=null; cloudSeeded=false;
+      localStorage.removeItem(CLOUD_CFG_KEY);
+      cloudStatus(""); $("cloudMsg").textContent="Condivisione disattivata.";
+    });
+
     render();
     fsaReconnect();   // ricollega il file dati se già scelto in precedenza
+    initCloud();      // attiva la condivisione se già configurata
   }catch(e){
     $("jsStatus").textContent="ERRORE";
     ioMsg((e?.stack||e?.message||String(e)));
