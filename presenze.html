@@ -70,6 +70,11 @@
   .chip.crown{ border:none; padding:0; font-size:12px; }
   .chip.deloc{ border:none; padding:0; font-size:12px; }
   .chip.star{ color:#e6edf3; border:none; padding:0; font-size:11px; }
+  /* toggle delocalizzato sul badge */
+  .delBtn{ border:none; background:transparent; cursor:pointer; padding:0 1px; font-size:13px; line-height:1; opacity:.25; filter:grayscale(1); }
+  .delBtn:hover{ opacity:.6; }
+  .delBtn.on{ opacity:1; filter:none; }
+  .delBtn.on:hover{ opacity:.85; }
   .badgeStatus{ font-size:10px; color:var(--muted); margin-top:2px; }
   .badgeNote{ font-size:10px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
 
@@ -405,7 +410,15 @@ function buildBadge(worker,rec,iso,curShift,date){
   if(worker.isChief){ const s=document.createElement("span"); s.className="chip crown"; s.textContent="👑"; s.title="Capo Officina"; head.appendChild(s); }
   else if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; s.title="Leader"; head.appendChild(s); }
   const nm=document.createElement("span"); nm.className="badgeName"; nm.textContent=worker.name; head.appendChild(nm);
-  if(isDel){ const c=document.createElement("span"); c.className="chip deloc"; c.textContent="🏠"; c.title="Delocalizzato"; head.appendChild(c); }
+  // toggle delocalizzato direttamente sul badge (senza aprire la scheda)
+  const delBtn=document.createElement("button");
+  delBtn.type="button";
+  delBtn.className="delBtn"+(isDel?" on":"");
+  delBtn.textContent="🏠";
+  delBtn.title=isDel?"Delocalizzato: clic per togliere":"Segna come delocalizzato";
+  delBtn.addEventListener("mousedown",e=>e.stopPropagation());
+  delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
+  head.appendChild(delBtn);
   head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
   el.appendChild(head);
 
