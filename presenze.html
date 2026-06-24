@@ -102,9 +102,9 @@
   .week.movemode .shift{ outline:2px dashed rgba(255,209,102,.55); outline-offset:-3px; cursor:pointer; }
   .week.movemode .shift .shiftBody{ min-height:26px; }
   /* barra suggerimento spostamento */
-  .moveHint{ position:sticky; bottom:8px; z-index:40; margin:8px auto 0; max-width:760px; display:flex; align-items:center; gap:12px; justify-content:space-between; background:#3a2f00; color:#ffe79e; border:1px solid #ffd166; border-radius:12px; padding:10px 14px; font-size:14px; box-shadow:0 6px 18px rgba(0,0,0,.35); }
+  .moveHint{ position:fixed; left:50%; transform:translateX(-50%); bottom:14px; z-index:1000; width:calc(100% - 28px); max-width:760px; display:flex; align-items:center; gap:12px; justify-content:space-between; background:#3a2f00; color:#ffe79e; border:1px solid #ffd166; border-radius:12px; padding:12px 16px; font-size:15px; box-shadow:0 8px 24px rgba(0,0,0,.45); }
   .moveHint.hidden{ display:none; }
-  .moveHint button{ border:none; background:#ffd166; color:#332600; font-weight:800; border-radius:8px; padding:7px 12px; cursor:pointer; white-space:nowrap; }
+  .moveHint button{ border:none; background:#ffd166; color:#332600; font-weight:800; border-radius:8px; padding:9px 14px; cursor:pointer; white-space:nowrap; }
   .badgeStatus{ font-size:10px; color:var(--muted); margin-top:2px; }
   .badgeNote{ font-size:10px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
 
@@ -133,6 +133,9 @@
   .filebanner.warn{ background:rgba(246,194,106,.16); border-color:rgba(246,194,106,.6); color:#f6dca0; }
   .filebanner.info{ background:rgba(255,255,255,.04); color:var(--muted); }
   .filebanner button{ padding:5px 10px; font-size:12px; }
+  /* versione "colleghi" (copia pre-configurata): niente Cloud/Salva/Carica, niente seconda riga */
+  body.embed #cloudBtn, body.embed #saveBtn, body.embed #loadBtn, body.embed #fileInput, body.embed #fileBanner{ display:none !important; }
+  body.embed .toolbar #cloudBanner{ margin:0; flex:1; min-width:160px; }
   .hidden{ display:none !important; }
   /* modale cloud */
   .modalWrap{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
@@ -1222,11 +1225,17 @@ function init(){
     });
 
     // copia pre-configurata aperta da un collega: usa la configurazione incorporata
-    if(!getCloudCfg() && window.PRESENZE_FB_EMBED && window.PRESENZE_FB_EMBED.cfg){
-      try{
-        localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(window.PRESENZE_FB_EMBED.cfg));
-        localStorage.setItem(CLOUD_ROOM_KEY, window.PRESENZE_FB_EMBED.room||"divisione");
-      }catch{}
+    if(window.PRESENZE_FB_EMBED && window.PRESENZE_FB_EMBED.cfg){
+      if(!getCloudCfg()){
+        try{
+          localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(window.PRESENZE_FB_EMBED.cfg));
+          localStorage.setItem(CLOUD_ROOM_KEY, window.PRESENZE_FB_EMBED.room||"divisione");
+        }catch{}
+      }
+      // versione colleghi: nascondi Cloud/Salva/Carica e mostra solo lo stato condivisione
+      document.body.classList.add("embed");
+      const tb=document.querySelector(".toolbar"), cb=$("cloudBanner"), rb=$("resetBtn");
+      if(tb&&cb&&rb) tb.insertBefore(cb, rb);
     }
 
     render();
