@@ -152,7 +152,7 @@
   </div>
 </div>
 
-<div class="status">Stato: <b id="jsStatus">—</b> <span id="ioStatus" class="muted"></span></div>
+<div class="status">Stato: <b id="jsStatus">—</b> <span id="ioStatus" class="muted"></span> <span id="fileLink" class="muted"></span></div>
 
 <!-- Anagrafica predefinita -->
 <script>
@@ -283,8 +283,8 @@ function effShift(worker,rec,date){
 
 /* ====== Storage (autosave) ====== */
 function loadStore(key){ try{ const r=localStorage.getItem(key); return r ? JSON.parse(r) : null; }catch{ return null; } }
-function saveWorkers(){ try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); }catch{} }
-function saveWeek(){ try{ localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{} }
+function saveWorkers(){ try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); }catch{} scheduleFileWrite(); }
+function saveWeek(){ try{ localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{} scheduleFileWrite(); }
 
 /* ====== Day record ====== */
 function ensureDay(weekKey,iso){
@@ -319,19 +319,97 @@ function normWorker(w){
     isChief:!!w.isChief
   };
 }
+function buildPayload(){
+  return { version:3, exportedAt:new Date().toISOString(), workers:data.workers.map(normWorker), week:data.week||{} };
+}
 function exportJson(){
-  downloadJson("presenze_data.json", { version:3, exportedAt:new Date().toISOString(), workers:data.workers.map(normWorker), week:data.week||{} });
+  downloadJson("presenze_data.json", buildPayload());
   ioMsg("salvato presenze_data.json");
 }
-async function importJson(file){
+function importJsonText(text){
   let obj;
-  try{ obj = JSON.parse(await file.text()); }
+  try{ obj = JSON.parse(text); }
   catch(e){ throw new Error("JSON non valido: " + (e?.message||e)); }
   if(!obj || typeof obj!=="object" || !Array.isArray(obj.workers)) throw new Error("File non valido (manca 'workers').");
   data.workers = obj.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
+  for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
   data.week = (obj.week && typeof obj.week==="object") ? obj.week : {};
   saveWorkers(); saveWeek(); render();
-  ioMsg("dati caricati");
+}
+async function importJson(file){ importJsonText(await file.text()); ioMsg("dati caricati"); }
+
+/* ====== File collegato nella cartella (File System Access API) ====== */
+const FSA = (typeof window!=="undefined") && ("showSaveFilePicker" in window);
+let fileHandle=null, fsTimer=null, fsPending=false, fsWriting=false;
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open("presenze_fs",1); r.onupgradeneeded=()=>r.result.createObjectStore("h"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbSet(k,v){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("h","readwrite"); t.objectStore("h").put(v,k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
+async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("h","readonly"); const q=t.objectStore("h").get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function idbDel(k){ const db=await idbOpen(); return new Promise((res)=>{ const t=db.transaction("h","readwrite"); t.objectStore("h").delete(k); t.oncomplete=()=>res(); }); }
+function setLinkStatus(text,onClick){
+  const el=$("fileLink"); if(!el) return;
+  el.textContent = text ? ("· "+text) : "";
+  el.style.cursor = onClick?"pointer":"default";
+  el.style.textDecoration = onClick?"underline":"none";
+  el.onclick = onClick||null;
+}
+function scheduleFileWrite(){ if(!fileHandle) return; fsPending=true; clearTimeout(fsTimer); fsTimer=setTimeout(flushFileWrite,600); }
+async function flushFileWrite(){
+  if(!fileHandle||fsWriting||!fsPending) return;
+  fsWriting=true; fsPending=false;
+  try{
+    if((await fileHandle.queryPermission({mode:"readwrite"}))!=="granted"){ fsWriting=false; return; }
+    const w=await fileHandle.createWritable();
+    await w.write(JSON.stringify(buildPayload(),null,2));
+    await w.close();
+    setLinkStatus("file: "+fileHandle.name+" (salvato ✓)");
+  }catch(e){ setLinkStatus("errore scrittura file"); }
+  fsWriting=false;
+  if(fsPending) flushFileWrite();
+}
+function fsaError(e){
+  if(e?.name==="AbortError") return null;
+  if(e?.name==="SecurityError") return "il browser blocca i file in locale: apri l'app via http o GitHub Pages";
+  return (e?.message||String(e));
+}
+async function fsaLinkSave(){
+  try{
+    const h=await window.showSaveFilePicker({ suggestedName:"presenze_data.json", types:[{description:"Dati Presenze (JSON)",accept:{"application/json":[".json"]}}] });
+    fileHandle=h; await idbSet("dataFile",h);
+    fsPending=true; await flushFileWrite();
+    setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
+  }catch(e){ const m=fsaError(e); if(m) setLinkStatus("errore: "+m); }
+}
+async function fsaLinkOpen(){
+  try{
+    const [h]=await window.showOpenFilePicker({ types:[{description:"Dati Presenze (JSON)",accept:{"application/json":[".json"]}}] });
+    let p=await h.queryPermission({mode:"readwrite"});
+    if(p!=="granted") p=await h.requestPermission({mode:"readwrite"});
+    const f=await h.getFile();
+    if(f.size>0) importJsonText(await f.text());
+    fileHandle=h; await idbSet("dataFile",h);
+    setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
+    ioMsg("dati caricati dal file");
+  }catch(e){ const m=fsaError(e); if(m){ setLinkStatus("errore: "+m); alert("Errore: "+m); } }
+}
+async function fsaReconnect(){
+  if(!FSA){ return; }
+  let h; try{ h=await idbGet("dataFile"); }catch{ return; }
+  if(!h){ setLinkStatus("nessun file collegato — usa 'Apri file' o 'Collega file'"); return; }
+  try{
+    if((await h.queryPermission({mode:"readwrite"}))==="granted"){
+      fileHandle=h;
+      try{ const f=await h.getFile(); if(f.size>0) importJsonText(await f.text()); }catch{}
+      setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
+    }else{
+      setLinkStatus("clic per ricollegare il file: "+h.name, async()=>{
+        if((await h.requestPermission({mode:"readwrite"}))==="granted"){
+          fileHandle=h;
+          try{ const f=await h.getFile(); if(f.size>0) importJsonText(await f.text()); }catch{}
+          setLinkStatus("file collegato: "+h.name+" — salvataggio automatico"); render();
+        }
+      });
+    }
+  }catch(e){}
 }
 
 /* ====== Download helper ====== */
@@ -812,8 +890,19 @@ function init(){
     $("todayBtn").addEventListener("click",()=>{ anchorISO=toISO(new Date()); expandedKey=null; render(); });
     $("pdfBtn").addEventListener("click",()=>{ try{ downloadDailyPDF(); }catch(e){ ioMsg("errore PDF: "+(e?.message||e)); } });
     $("xlsBtn").addEventListener("click",()=>{ try{ downloadWeeklyExcel(); }catch(e){ ioMsg("errore Excel: "+(e?.message||e)); } });
-    $("saveBtn").addEventListener("click",exportJson);
-    $("loadBtn").addEventListener("click",()=>$("fileInput").click());
+    if(FSA){
+      // Chrome/Edge: collega un file nella cartella e salva/carica automaticamente
+      $("saveBtn").textContent="💾 Collega file";
+      $("saveBtn").title="Collega un file JSON nella cartella: salvataggio automatico a ogni modifica";
+      $("loadBtn").textContent="📂 Apri file";
+      $("loadBtn").title="Apri un file JSON esistente e collegalo per il salvataggio automatico";
+      $("saveBtn").addEventListener("click",fsaLinkSave);
+      $("loadBtn").addEventListener("click",fsaLinkOpen);
+    }else{
+      $("saveBtn").addEventListener("click",exportJson);
+      $("loadBtn").addEventListener("click",()=>$("fileInput").click());
+      setLinkStatus("salvataggio file automatico non disponibile in questo browser (usa Chrome/Edge)");
+    }
     $("fileInput").addEventListener("change",async()=>{
       const f=$("fileInput").files?.[0]; if(!f) return;
       try{ await importJson(f); }catch(e){ ioMsg("errore: "+(e?.message||e)); alert("Errore caricamento: "+(e?.message||e)); }
@@ -823,6 +912,7 @@ function init(){
     $("addBtn").addEventListener("click",addWorker);
     $("addName").addEventListener("keydown",e=>{ if(e.key==="Enter") addWorker(); });
     render();
+    fsaReconnect();   // ricollega il file dati se già scelto in precedenza
   }catch(e){
     $("jsStatus").textContent="ERRORE";
     ioMsg((e?.stack||e?.message||String(e)));
