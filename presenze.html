@@ -70,7 +70,6 @@
   .badge{ border:1px solid var(--line); border-radius:10px; background:rgba(0,0,0,.20); padding:6px 8px; cursor:grab; user-select:none; }
   .badge:active{ cursor:grabbing; }
   .badge.dragging{ opacity:.4; }
-  .badge.leader{ border-color:#e6edf3; }
   .badge.nodrag{ cursor:default; }
   .badge.open{ background:rgba(255,255,255,.06); }
   /* cambio turno: badge spostato in un turno diverso da quello automatico */
@@ -86,6 +85,9 @@
   .badgeName{ font-weight:700; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .badge.isAbsent .badgeName{ color:var(--a-bar); }
   .badge.isDeloc .badgeName{ opacity:.6; }   /* delocalizzato: nome al 60% */
+  /* versione colleghi: giornate passate non modificabili */
+  .badge.locked{ cursor:default; }
+  .day.locked .dayHead .dnum::after{ content:" 🔒"; font-size:11px; opacity:.7; }
   .chip{ font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
   .chip.crown{ border:none; padding:0; font-size:12px; }
   .chip.deloc{ border:none; padding:0; font-size:12px; }
@@ -292,6 +294,8 @@ window.data = data;
 let anchorISO = toISO(new Date());   // un giorno qualsiasi della settimana mostrata
 let expandedKey = null;              // `${workerId}__${dateISO}`
 let dragId = null;
+let isEmbed = false;                  // copia "colleghi": giornate passate in sola lettura
+function isPastLocked(date){ return isEmbed && toISO(date) < toISO(new Date()); }
 let weekendCollapsed = false;        // colonna Sab/Dom collassata
 function setWeekendCollapsed(v){ weekendCollapsed=!!v; try{ localStorage.setItem("presenze_weekend_collapsed", v?"1":"0"); }catch{} render(); }
 
@@ -809,6 +813,7 @@ function exportConfiguredCopy(){
 function moveWorker(wid,iso,shift){
   const worker=data.workers.find(w=>w.id===wid);
   const date=fromISO(iso);
+  if(isPastLocked(date)) return; // versione colleghi: giornate passate in sola lettura
   if(isNoShift(worker) && !isWeekend(date)) return; // Area Senza Turno: fisso solo nei feriali
   const wk=getISOWeekKey(date);
   const rec=getRec(wk,iso,wid);
@@ -859,7 +864,7 @@ function buildDayColumn(date, todayISO){
   const iso=toISO(date), wk=getISOWeekKey(date);
   const weekend=isWeekend(date);
   const col=document.createElement("div");
-  col.className="day"+(iso===todayISO?" today":"")+(weekend?" weekend":"");
+  col.className="day"+(iso===todayISO?" today":"")+(weekend?" weekend":"")+(isPastLocked(date)?" locked":"");
 
   const head=document.createElement("div"); head.className="dayHead";
   head.innerHTML=`<div class="dow">${DOW[(date.getDay()+6)%7]}</div><div class="dnum">${date.getDate()} ${MON[date.getMonth()]}</div>`;
@@ -945,11 +950,19 @@ function buildBadge(worker,rec,iso,curShift,date){
   const isChanged=!fixed && !isWeekend(date) && !g192 && (curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
   const key=worker.id+"__"+iso;
   const open=expandedKey===key;
+  const locked=isPastLocked(date);   // versione colleghi: giornata passata in sola lettura
 
   const el=document.createElement("div");
-  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(fixed?" nodrag":"")+(open?" open":"")+(isDel?" isDeloc":"");
-  el.draggable=!fixed;
+  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(fixed?" nodrag":"")+(open?" open":"")+(isDel?" isDeloc":"")+(locked?" locked":"");
+  el.draggable=!fixed && !locked;
   el.dataset.id=worker.id;
+
+  // sfondo del box = colore del turno (40%, oppure 20% se delocalizzato); rosso 40%/20% se cambio turno
+  let bgRGB=null;
+  if(isChanged) bgRGB="255,107,107";                 // rosso: cambio turno
+  else if(curShift==="morning") bgRGB="31,111,235";  // blu: mattina
+  else if(curShift==="afternoon") bgRGB="246,194,106";// giallo: pomeriggio
+  if(bgRGB) el.style.backgroundColor="rgba("+bgRGB+","+(isDel?0.20:0.40)+")";
 
   const head=document.createElement("div"); head.className="badgeHead";
   if(worker.isChief){ const s=document.createElement("span"); s.className="chip crown"; s.textContent="👑"; s.title="Capo Officina"; head.appendChild(s); }
@@ -962,8 +975,11 @@ function buildBadge(worker,rec,iso,curShift,date){
     gBtn.className="g192Btn"+(g192?" on":"");
     gBtn.textContent="⏰";
     gBtn.title=g192?("Turno G192 "+G192_HOURS+": clic per togliere"):("Attiva Turno G192 ("+G192_HOURS+")");
-    gBtn.addEventListener("mousedown",e=>e.stopPropagation());
-    gBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{g192:!rec.g192}); render(); });
+    if(locked){ gBtn.style.pointerEvents="none"; }
+    else{
+      gBtn.addEventListener("mousedown",e=>e.stopPropagation());
+      gBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{g192:!rec.g192}); render(); });
+    }
     head.appendChild(gBtn);
   }
 
@@ -973,11 +989,14 @@ function buildBadge(worker,rec,iso,curShift,date){
   delBtn.className="delBtn"+(isDel?" on":"");
   delBtn.textContent="🏠";
   delBtn.title=isDel?"Delocalizzato: clic per togliere":"Segna come delocalizzato";
-  delBtn.addEventListener("mousedown",e=>e.stopPropagation());
-  delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
+  if(locked){ delBtn.style.pointerEvents="none"; }
+  else{
+    delBtn.addEventListener("mousedown",e=>e.stopPropagation());
+    delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
+  }
   head.appendChild(delBtn);
 
-  head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
+  if(!locked) head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
   el.appendChild(head);
 
   if(st!=="PRESENTE"){ const s=document.createElement("div"); s.className="badgeStatus"; s.textContent=statusLabel(st); el.appendChild(s); }
@@ -1061,6 +1080,7 @@ function setupDnD(){
   });
   root.addEventListener("dragover",e=>{
     const z=e.target.closest(".shift"); if(!z) return;
+    if(z.closest(".day.locked")) return;   // versione colleghi: giornata passata bloccata
     e.preventDefault(); e.dataTransfer.dropEffect="move";
     root.querySelectorAll(".shift.dropok").forEach(c=>{ if(c!==z) c.classList.remove("dropok"); });
     z.classList.add("dropok");
@@ -1186,6 +1206,7 @@ function init(){
         }catch{}
       }
       // versione colleghi: nascondi Cloud/Salva/Carica e mostra solo lo stato condivisione
+      isEmbed = true;
       document.body.classList.add("embed");
       const tb=document.querySelector(".toolbar"), cb=$("cloudBanner"), rb=$("resetBtn");
       if(tb&&cb&&rb) tb.insertBefore(cb, rb);
