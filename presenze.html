@@ -89,10 +89,10 @@
   .chip.deloc{ border:none; padding:0; font-size:12px; }
   .chip.star{ color:#e6edf3; border:none; padding:0; font-size:11px; }
   /* toggle delocalizzato sul badge */
-  .delBtn{ border:none; background:transparent; cursor:pointer; padding:0 1px; font-size:13px; line-height:1; opacity:.25; filter:grayscale(1); }
-  .delBtn:hover{ opacity:.6; }
-  .delBtn.on{ opacity:1; filter:none; }
-  .delBtn.on:hover{ opacity:.85; }
+  .delBtn,.g192Btn{ border:none; background:transparent; cursor:pointer; padding:0 1px; font-size:13px; line-height:1; opacity:.25; filter:grayscale(1); }
+  .delBtn:hover,.g192Btn:hover{ opacity:.6; }
+  .delBtn.on,.g192Btn.on{ opacity:1; filter:none; }
+  .delBtn.on:hover,.g192Btn.on:hover{ opacity:.85; }
   .badgeStatus{ font-size:10px; color:var(--muted); margin-top:2px; }
   .badgeNote{ font-size:10px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
 
@@ -202,11 +202,9 @@ const SENZA_TURNO_IDS = new Set(["stefano_ancillai","annamaria_biscetti","floria
 function isNoShift(worker){ return worker && worker.deptId==="N"; }
 const STATUS = [
   { id:"PRESENTE",              label:"Presente" },
-  { id:"DELOCALIZZATO",         label:"Delocalizzato" },
   { id:"TELELAVORO",            label:"Telelavoro" },
   { id:"ENTRATA_RITARDATA",     label:"Entrata ritardata" },
   { id:"USCITA_ANTICIPATA",     label:"Uscita anticipata" },
-  { id:"TURNO_G192",            label:"Turno G192" },
   { id:"MALATTIA",              label:"Malattia" },
   { id:"LEGGE_104",             label:"Legge 104" },
   { id:"CONGEDO_ORDINARIO",     label:"Congedo ordinario" },
@@ -272,13 +270,39 @@ function autoWorkShift(worker,date){
   if(isNoShift(worker)) return "morning";          // Area Senza Turno: sempre mattina
   return isMorningTeam(worker.baseTeam,date) ? "morning" : "afternoon";
 }
+function isG192(worker,rec){ return worker && worker.deptId==="S" && !!(rec&&rec.g192); }
+/* Orari per reparto e turno */
+function hoursFor(deptId,shiftId){
+  if(deptId==="N") return "8:00–16:20";
+  if(deptId==="P") return shiftId==="afternoon" ? "12:20–20:30" : "7:00–15:10";
+  if(deptId==="S") return shiftId==="afternoon" ? "11:20–19:30" : "7:00–15:10";
+  return "";
+}
+const G192_HOURS="6:30–14:40";
 /* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
 function effShift(worker,rec,date){
   if(isWeekend(date)) return rec.shift==="work" ? "work" : "home";   // default: a casa
-  if(isNoShift(worker)) return isAbsentStatus(rec.status||"PRESENTE") ? "absent" : "morning";
+  const absent=isAbsentStatus(rec.status||"PRESENTE");
+  if(isNoShift(worker)) return absent ? "absent" : "morning";
+  if(isG192(worker,rec)) return absent ? "absent" : "morning";       // G192: sempre mattina
   if(rec.shift==="morning"||rec.shift==="afternoon"||rec.shift==="absent") return rec.shift;
-  if(isAbsentStatus(rec.status||"PRESENTE")) return "absent";
+  if(absent) return "absent";
   return autoWorkShift(worker,date);
+}
+/* Gruppi ordinati per un turno suddiviso (G192 prima dell'Area Senza Turno) */
+function splitGroups(items,shiftId){
+  const groups=[];
+  if(shiftId==="morning"){
+    const g=items.filter(x=>isG192(x.worker,x.rec));
+    if(g.length) groups.push({ label:"Turno G192", hours:G192_HOURS, items:g });
+  }
+  for(const d of DEPTS){
+    let inDept=items.filter(x=>x.worker.deptId===d.id);
+    if(shiftId==="morning") inDept=inDept.filter(x=>!isG192(x.worker,x.rec));
+    if(!inDept.length) continue;
+    groups.push({ label:d.name, hours:hoursFor(d.id,shiftId), items:inDept });
+  }
+  return groups;
 }
 
 /* ====== Storage (autosave) ====== */
@@ -293,7 +317,7 @@ function ensureDay(weekKey,iso){
 }
 function getRec(weekKey,iso,wid){
   ensureDay(weekKey,iso);
-  return data.week[weekKey].days[iso][wid] || { status:"PRESENTE", deloc:false, note:"", shift:null };
+  return data.week[weekKey].days[iso][wid] || { status:"PRESENTE", deloc:false, g192:false, note:"", shift:null };
 }
 function setRec(weekKey,iso,wid,patch){
   ensureDay(weekKey,iso);
@@ -433,8 +457,12 @@ function placementText(worker,rec,date){
   if(sh==="absent") base=statusLabel(st);
   else if(sh==="home") base="A casa";
   else if(sh==="work") base="Al lavoro";
-  else if(sh==="morning") base=isNoShift(worker)?"Mattina (8–16:20)":"Mattina";
-  else if(sh==="afternoon") base="Pomeriggio";
+  else if(sh==="morning"){
+    if(isNoShift(worker)) base="Mattina (8:00–16:20)";
+    else if(isG192(worker,rec)) base="Turno G192 ("+G192_HOURS+")";
+    else base="Mattina ("+hoursFor(worker.deptId,"morning")+")";
+  }
+  else if(sh==="afternoon") base="Pomeriggio ("+hoursFor(worker.deptId,"afternoon")+")";
   else base=sh;
   const extra=[];
   if(sh!=="absent" && isDeloc(rec,st)) extra.push("Deloc");
@@ -507,11 +535,9 @@ function downloadDailyPDF(){
     pdfText(cmd,40,y,13,true,sh.label.toUpperCase()+"  ("+items.length+")"); y+=17;
     if(!items.length){ pdfText(cmd,52,y,10,false,"—"); y+=15; continue; }
     if(sh.split){
-      for(const d of DEPTS){
-        const inDept=sortLeaderFirst(items.filter(x=>x.worker.deptId===d.id));
-        if(!inDept.length) continue;
-        pdfText(cmd,52,y,11,true,(d.hours?d.name+" ("+d.hours+")":d.name)); y+=14;
-        for(const it of inDept){ if(y>815) break; pdfText(cmd,64,y,10,false,pdfNameLine(it)); y+=13; }
+      for(const g of splitGroups(items,sh.id)){
+        pdfText(cmd,52,y,11,true,(g.hours?g.label+" ("+g.hours+")":g.label)); y+=14;
+        for(const it of sortLeaderFirst(g.items)){ if(y>815) break; pdfText(cmd,64,y,10,false,pdfNameLine(it)); y+=13; }
         y+=4;
       }
     }else{
@@ -523,39 +549,86 @@ function downloadDailyPDF(){
   ioMsg("PDF giornaliero scaricato");
 }
 
-/* ====== Excel settimanale (Lun–Ven, formato .xls HTML) ====== */
-function xmlEsc(s){ return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+/* ====== Excel settimanale (.xlsx reale, Lun–Ven) ====== */
+function xmlEsc(s){ return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+const CRC_TABLE=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; } return t; })();
+function crc32(buf){ let c=0xFFFFFFFF; for(let i=0;i<buf.length;i++) c=CRC_TABLE[(c^buf[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function zipStore(files){
+  const enc=new TextEncoder();
+  const u16=n=>[n&0xFF,(n>>>8)&0xFF];
+  const u32=n=>[n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF];
+  const parts=[]; const central=[]; let offset=0;
+  for(const f of files){
+    const nameBytes=enc.encode(f.name);
+    const data=(f.data instanceof Uint8Array)?f.data:enc.encode(f.data);
+    const crc=crc32(data);
+    const lh=new Uint8Array([].concat(u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nameBytes.length),u16(0)));
+    parts.push(lh,nameBytes,data);
+    central.push({nameBytes,crc,size:data.length,offset});
+    offset+=lh.length+nameBytes.length+data.length;
+  }
+  const cParts=[]; let cSize=0;
+  for(const c of central){
+    const ch=new Uint8Array([].concat(u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(c.crc),u32(c.size),u32(c.size),u16(c.nameBytes.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(c.offset)));
+    cParts.push(ch,c.nameBytes); cSize+=ch.length+c.nameBytes.length;
+  }
+  const end=new Uint8Array([].concat(u32(0x06054b50),u16(0),u16(0),u16(central.length),u16(central.length),u32(cSize),u32(offset),u16(0)));
+  const all=parts.concat(cParts,[end]);
+  let total=0; for(const a of all) total+=a.length;
+  const out=new Uint8Array(total); let p=0; for(const a of all){ out.set(a,p); p+=a.length; }
+  return out;
+}
+function colLetter(n){ let s=""; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
+function sheetXml(rows){
+  let sd="";
+  rows.forEach((row,ri)=>{
+    const r=ri+1; sd+=`<row r="${r}">`;
+    row.forEach((cell,ci)=>{
+      const ref=colLetter(ci+1)+r;
+      const s=cell.bold?' s="1"':'';
+      sd+=`<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${xmlEsc(cell.t)}</t></is></c>`;
+    });
+    sd+="</row>";
+  });
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'+sd+'</sheetData></worksheet>';
+}
+function buildXlsx(rows){
+  const files=[
+    {name:"[Content_Types].xml", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
+    {name:"_rels/.rels", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
+    {name:"xl/workbook.xml", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Prospetto" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+    {name:"xl/_rels/workbook.xml.rels", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},
+    {name:"xl/styles.xml", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>'},
+    {name:"xl/worksheets/sheet1.xml", data:sheetXml(rows)}
+  ];
+  return zipStore(files);
+}
 function downloadWeeklyExcel(){
   const days=weekDates(fromISO(anchorISO)).filter(d=>!isWeekend(d));   // esclude Sab/Dom
   const wkKey=getISOWeekKey(fromISO(anchorISO));
   const dd=d=>pad(d.getDate())+"/"+pad(d.getMonth()+1);
-
-  let h='<html><head><meta charset="UTF-8"></head><body>';
-  h+='<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:Arial;font-size:12px">';
-  h+=`<tr><td colspan="${days.length+1}" style="font-weight:bold;font-size:14px;background:#1f6feb;color:#fff">Prospetto settimanale — Settimana ${wkKey}</td></tr>`;
-  h+='<tr style="background:#dce6f5;font-weight:bold"><td>Nominativo</td>';
-  for(let i=0;i<days.length;i++) h+=`<td>${DOW[i]} ${dd(days[i])}</td>`;
-  h+='</tr>';
-
+  const rows=[];
+  rows.push([{t:"Prospetto settimanale — Settimana "+wkKey, bold:true}]);
+  const header=[{t:"Nominativo", bold:true}];
+  days.forEach((d,i)=>header.push({t:DOW[i]+" "+dd(d), bold:true}));
+  rows.push(header);
   for(const dpt of DEPTS){
     const list=sortLeaderFirst(data.workers.filter(w=>w.deptId===dpt.id).map(w=>({worker:w})));
     if(!list.length) continue;
-    h+=`<tr><td colspan="${days.length+1}" style="font-weight:bold;background:#eef2f7">${xmlEsc(dpt.hours?dpt.name+" ("+dpt.hours+")":dpt.name)}</td></tr>`;
+    rows.push([{t:dpt.name, bold:true}]);
     for(const it of list){
       const w=it.worker;
       const nm=(w.isChief?"★ ":(w.isLeader?"• ":""))+w.name+(w.isChief?" (Capo Officina)":"");
-      h+='<tr><td>'+xmlEsc(nm)+'</td>';
+      const row=[{t:nm}];
       for(const d of days){
         const rec=getRec(getISOWeekKey(d),toISO(d),w.id);
-        const txt=placementText(w,rec,d);
-        const absent=effShift(w,rec,d)==="absent";
-        h+=`<td${absent?' style="color:#c00"':''}>${xmlEsc(txt)}</td>`;
+        row.push({t:placementText(w,rec,d)});
       }
-      h+='</tr>';
+      rows.push(row);
     }
   }
-  h+='</table></body></html>';
-  downloadBlob(`Prospetto_${wkKey}.xls`, "﻿"+h, "application/vnd.ms-excel");
+  downloadBlob(`Prospetto_${wkKey}.xlsx`, buildXlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   ioMsg("Excel settimanale scaricato");
 }
 
@@ -568,6 +641,7 @@ function moveWorker(wid,iso,shift){
   const rec=getRec(wk,iso,wid);
   const patch={ shift };
   if(shift!=="absent" && isAbsentStatus(rec.status||"PRESENTE")) patch.status="PRESENTE";
+  if(isG192(worker,rec) && shift!=="morning") patch.g192=false;   // uscendo dalla mattina si annulla il G192
   setRec(wk,iso,wid,patch);
   render();
 }
@@ -636,16 +710,15 @@ function buildDayColumn(date, todayISO){
     const items=buckets[sh.id];
 
     if(sh.split){
-      // suddivisione: Area Senza Turno / Area Prestampa / Reparto Stampa (solo gruppi non vuoti)
-      for(const d of DEPTS){
-        const inDept=items.filter(x=>x.worker.deptId===d.id);
-        if(!inDept.length) continue;
+      // gruppi: G192 / Area Senza Turno / Area Prestampa / Reparto Stampa (solo non vuoti)
+      const groups=splitGroups(items,sh.id);
+      for(const g of groups){
         const grp=document.createElement("div"); grp.className="deptGroup";
         const nm=document.createElement("div"); nm.className="deptName";
-        nm.textContent=d.hours ? (d.name+" · "+d.hours) : d.name;
+        nm.textContent=g.hours ? (g.label+" · "+g.hours) : g.label;
         grp.appendChild(nm);
         const bb=document.createElement("div"); bb.className="deptBadges";
-        for(const it of sortLeaderFirst(inDept)) bb.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
+        for(const it of sortLeaderFirst(g.items)) bb.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
         grp.appendChild(bb);
         sBody.appendChild(grp);
       }
@@ -689,9 +762,10 @@ function buildBadge(worker,rec,iso,curShift,date){
   const st=rec.status||"PRESENTE";
   const isAbs=isAbsentStatus(st);
   const isDel=!!rec.deloc || st==="DELOCALIZZATO" || st==="TELELAVORO";
-  const fixed=isNoShift(worker) && !isWeekend(date);   // turno fisso solo nei feriali
-  // cambio turno: collocato in un turno lavorativo diverso da quello automatico (solo feriali)
-  const isChanged=!fixed && !isWeekend(date) && (curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
+  const g192=isG192(worker,rec);
+  const fixed=isNoShift(worker) && !isWeekend(date);   // turno fisso (Senza Turno) solo nei feriali
+  // cambio turno: collocato in un turno lavorativo diverso da quello automatico (solo feriali, no G192)
+  const isChanged=!fixed && !isWeekend(date) && !g192 && (curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
   const key=worker.id+"__"+iso;
   const open=expandedKey===key;
 
@@ -713,6 +787,18 @@ function buildBadge(worker,rec,iso,curShift,date){
   delBtn.addEventListener("mousedown",e=>e.stopPropagation());
   delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
   head.appendChild(delBtn);
+
+  // toggle Turno G192 (solo Reparto Stampa) accanto all'icona delocalizzato
+  if(worker.deptId==="S" && !isWeekend(date)){
+    const gBtn=document.createElement("button");
+    gBtn.type="button";
+    gBtn.className="g192Btn"+(g192?" on":"");
+    gBtn.textContent="⏰";
+    gBtn.title=g192?("Turno G192 "+G192_HOURS+": clic per togliere"):("Attiva Turno G192 ("+G192_HOURS+")");
+    gBtn.addEventListener("mousedown",e=>e.stopPropagation());
+    gBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{g192:!rec.g192}); render(); });
+    head.appendChild(gBtn);
+  }
   head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
   el.appendChild(head);
 
@@ -736,33 +822,10 @@ function buildEditor(worker,rec,iso,curShift){
   sel.addEventListener("change",()=>changeStatus(worker.id,iso,sel.value));
   ed.appendChild(sel);
 
-  // Delocalizzato (flag con iconetta sul badge)
-  const ctl=document.createElement("label"); ctl.className="ctlab";
-  const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!rec.deloc;
-  cb.addEventListener("change",()=>{ setRec(wk,iso,worker.id,{deloc:cb.checked}); render(); });
-  ctl.appendChild(cb); ctl.appendChild(document.createTextNode("🏠 Delocalizzato"));
-  ed.appendChild(ctl);
-
   // note
   const note=document.createElement("input"); note.type="text"; note.placeholder="Note…"; note.maxLength=50; note.value=rec.note||"";
   note.addEventListener("input",()=>setRec(wk,iso,worker.id,{note:clamp(note.value,50)}));
   ed.appendChild(note);
-
-  // sposta (fallback al drag) — non disponibile per l'Area Senza Turno nei feriali
-  const date=fromISO(iso);
-  if(isNoShift(worker) && !isWeekend(date)){
-    const note=document.createElement("div"); note.className="fixedNote"; note.textContent="Turno fisso · Mattina 8:00–16:20";
-    ed.appendChild(note);
-  }else{
-    const mv=document.createElement("div"); mv.className="moveBtns";
-    for(const s of shiftsFor(date)){
-      const b=document.createElement("button"); b.type="button"; b.textContent=s.label;
-      if(s.id===curShift) b.classList.add("cur");
-      b.addEventListener("click",()=>moveWorker(worker.id,iso,s.id));
-      mv.appendChild(b);
-    }
-    ed.appendChild(mv);
-  }
 
   // anagrafica
   const ana=document.createElement("div"); ana.className="anaBox";
