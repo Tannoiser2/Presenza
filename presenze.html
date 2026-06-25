@@ -121,6 +121,10 @@
 
   /* ===== Add worker ===== */
   .addbox{ margin:0 16px 24px; border:1px dashed var(--line); border-radius:12px; padding:12px; background:rgba(255,255,255,.02); }
+  .deptRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 10px; border:1px solid var(--line); border-radius:10px; margin-bottom:6px; background:var(--panel2); }
+  .deptRow .deptInfo{ min-width:0; overflow:hidden; }
+  .deptRow .deptInfo b{ font-size:13px; }
+  .deptRow button{ padding:5px 10px; font-size:12px; flex:0 0 auto; }
   .addgrid{ display:grid; grid-template-columns:1.6fr 1fr .8fr .8fr auto; gap:8px; align-items:end; }
   @media (max-width: 760px){ .addgrid{ grid-template-columns:1fr; } }
   .field{ display:flex; flex-direction:column; gap:5px; }
@@ -209,14 +213,28 @@
 
 <div class="week" id="week"></div>
 
-<div class="addbox">
-  <div class="small" id="addTitle" style="font-weight:800; margin-bottom:8px;">Aggiungi operaio</div>
-  <div class="addgrid">
-    <label class="field"><span>Nome e cognome</span><input id="addName" type="text" placeholder="Mario Rossi" /></label>
-    <label class="field"><span>Reparto</span><select id="addDept"></select></label>
-    <label class="field"><span>Squadra</span><select id="addTeam"><option value="A">A</option><option value="B">B</option></select></label>
-    <label class="field"><span>Leader</span><select id="addLeader"><option value="0">No</option><option value="1">Sì</option></select></label>
-    <button id="addBtn" class="primary">Aggiungi</button>
+<div id="editorPanel" style="display:none">
+  <div class="addbox">
+    <div class="small" style="font-weight:800; margin-bottom:8px;">Reparti</div>
+    <div id="deptList"></div>
+    <div class="addgrid" style="margin-top:10px">
+      <label class="field"><span>Nuovo reparto</span><input id="ndName" type="text" placeholder="Es. Magazzino" /></label>
+      <label class="field"><span>Area</span><select id="ndSection"><option value="produzione">Area Produzione</option><option value="divisione">Area Amministrativa</option></select></label>
+      <label class="field"><span>Delocalizz. 🏠</span><select id="ndDeloc"><option value="1">Sì</option><option value="0">No</option></select></label>
+      <label class="field"><span>Turno G192 ⏰</span><select id="ndG192"><option value="0">No</option><option value="1">Sì</option></select></label>
+      <button id="ndAdd" class="primary">Aggiungi reparto</button>
+    </div>
+  </div>
+
+  <div class="addbox">
+    <div class="small" id="addTitle" style="font-weight:800; margin-bottom:8px;">Aggiungi operaio / operatore</div>
+    <div class="addgrid">
+      <label class="field"><span>Nome e cognome</span><input id="addName" type="text" placeholder="Mario Rossi" /></label>
+      <label class="field"><span>Reparto</span><select id="addDept"></select></label>
+      <label class="field"><span>Squadra</span><select id="addTeam"><option value="A">A</option><option value="B">B</option></select></label>
+      <label class="field"><span>Leader</span><select id="addLeader"><option value="0">No</option><option value="1">Sì</option></select></label>
+      <button id="addBtn" class="primary">Aggiungi</button>
+    </div>
   </div>
 </div>
 
@@ -252,16 +270,33 @@ window.HARD_WORKERS = [
 /* ====== Costanti ====== */
 /* Due reparti: Area Prestampa (ex Prestampa + Revisione) e Reparto Stampa (ex Stampa + Allestimento) */
 /* Aree: Senza Turno (orario fisso 8-16:20), Area Prestampa, Reparto Stampa */
-const DEPTS = [
-  { id:"N", name:"Area Senza Turno", section:"produzione", hours:"8:00–16:20", fixedMorning:true },
-  { id:"P", name:"Area Prestampa", section:"produzione" },
-  { id:"S", name:"Reparto Stampa", section:"produzione" },
+/* Reparti predefiniti. allowDeloc=mostra 🏠 · allowG192=mostra ⏰ · fixedMorning=orario fisso mattina */
+const DEFAULT_DEPTS = [
+  { id:"N", name:"Area Senza Turno", section:"produzione", hours:"8:00–16:20", fixedMorning:true, allowDeloc:true, allowG192:false, builtin:true },
+  { id:"P", name:"Area Prestampa", section:"produzione", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"S", name:"Reparto Stampa", section:"produzione", allowDeloc:true, allowG192:true, builtin:true },
   // Resto della Divisione: orario fisso 8:00–16:20, nessun turno
-  { id:"AM", name:"Area Amministrativa",   section:"divisione", hours:"8:00–16:20" },
-  { id:"TE", name:"Area Tecnica",          section:"divisione", hours:"8:00–16:20" },
-  { id:"GR", name:"Progettazione Grafica", section:"divisione", hours:"8:00–16:20" },
-  { id:"SP", name:"Spedizioni",            section:"divisione", hours:"8:00–16:20" },
+  { id:"AM", name:"Area Amministrativa",   section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"TE", name:"Area Tecnica",          section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"GR", name:"Progettazione Grafica", section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"SP", name:"Spedizioni",            section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
 ];
+let DEPTS = DEFAULT_DEPTS.map(d=>({...d}));
+function normDept(d){
+  return {
+    id:String(d.id||uuid()),
+    name:normName(d.name||"")||"Reparto",
+    section:(d.section==="divisione")?"divisione":"produzione",
+    hours:d.hours||"",
+    fixedMorning:!!d.fixedMorning,
+    allowDeloc:d.allowDeloc!==false,
+    allowG192:!!d.allowG192,
+    builtin:!!d.builtin
+  };
+}
+function setDepts(list){ DEPTS = (Array.isArray(list)&&list.length) ? list.map(normDept) : DEFAULT_DEPTS.map(d=>({...d})); }
+function deptAllowsDeloc(worker){ const d=deptById(worker&&worker.deptId); return !d || d.allowDeloc!==false; }
+function deptAllowsG192(worker){ const d=deptById(worker&&worker.deptId); return !!(d&&d.allowG192); }
 /* Schede (tab) della pagina */
 const SECTIONS = [
   { id:"produzione", label:"Area Produzione" },
@@ -269,8 +304,10 @@ const SECTIONS = [
 ];
 function sectionOf(deptId){ return (DEPTS.find(d=>d.id===deptId)?.section) || "produzione"; }
 function mapDept(old){
-  const o=String(old||"").toUpperCase();
-  if(DEPTS.some(d=>d.id===o)) return o;            // id già valido (N,P,S,AM,TE,GR,SP)
+  const raw=String(old||"");
+  if(DEPTS.some(d=>d.id===raw)) return raw;        // id già valido (anche reparti personalizzati)
+  const o=raw.toUpperCase();
+  if(DEPTS.some(d=>d.id===o)) return o;            // legacy in maiuscolo (N,P,S,AM,…)
   if(o==="B"||o==="C") return "S";                 // legacy: Allestimento -> Reparto Stampa
   return "P";                                      // Prestampa, Revisione, default -> Area Prestampa
 }
@@ -278,7 +315,7 @@ function mapDept(old){
 const REMOVED_IDS = new Set(["roberto_benvenuti","leonardo_forti"]);
 /* Operai dell'Area Senza Turno (sempre mattina, nessun cambio turno) */
 const SENZA_TURNO_IDS = new Set(["stefano_ancillai","annamaria_biscetti","floriana_de_rosa"]);
-function isNoShift(worker){ return worker && worker.deptId==="N"; }
+function isNoShift(worker){ const d=deptById(worker&&worker.deptId); return !!(d&&d.fixedMorning); }
 const STATUS = [
   { id:"PRESENTE",              label:"Presente" },
   { id:"TELELAVORO",            label:"Telelavoro" },
@@ -318,6 +355,7 @@ const MON = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","
 
 const STORE_WORKERS = "presenze_divisione_workers_v3";
 const STORE_WEEK    = "presenze_divisione_week_v3";
+const STORE_DEPTS   = "presenze_divisione_depts_v1";
 
 /* ====== Stato ====== */
 let data = { workers:[], week:{} };
@@ -377,13 +415,13 @@ function autoWorkShift(worker,date){
   if(isNoShift(worker)) return "morning";          // Area Senza Turno: sempre mattina
   return isMorningTeam(worker.baseTeam,date) ? "morning" : "afternoon";
 }
-function isG192(worker,rec){ return worker && worker.deptId==="S" && !!(rec&&rec.g192); }
+function isG192(worker,rec){ return deptAllowsG192(worker) && !!(rec&&rec.g192); }
 /* Orari per reparto e turno */
 function hoursFor(deptId,shiftId){
   if(deptId==="N") return "8:00–16:20";
   if(deptId==="P") return shiftId==="afternoon" ? "12:20–20:30" : "7:00–15:10";
   if(deptId==="S") return shiftId==="afternoon" ? "11:20–19:30" : "7:00–15:10";
-  return "";
+  return deptById(deptId)?.hours || "";
 }
 const G192_HOURS="6:30–14:40";
 /* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
@@ -429,6 +467,7 @@ function divGroups(items){
 function loadStore(key){ try{ const r=localStorage.getItem(key); return r ? JSON.parse(r) : null; }catch{ return null; } }
 function saveWorkers(){ try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); }catch{} scheduleFileWrite(); cloudPushWorkers(); }
 function saveWeek(){ try{ localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{} scheduleFileWrite(); }
+function saveDepts(){ try{ localStorage.setItem(STORE_DEPTS, JSON.stringify(DEPTS)); }catch{} scheduleFileWrite(); cloudPushDepts(); }
 
 /* ====== Day record ====== */
 function ensureDay(weekKey,iso){
@@ -465,7 +504,7 @@ function normWorker(w){
   };
 }
 function buildPayload(){
-  return { version:3, exportedAt:new Date().toISOString(), workers:data.workers.map(normWorker), week:data.week||{} };
+  return { version:3, exportedAt:new Date().toISOString(), depts:DEPTS, workers:data.workers.map(normWorker), week:data.week||{} };
 }
 function exportJson(){
   downloadJson("presenze_data.json", buildPayload());
@@ -476,10 +515,11 @@ function importJsonText(text){
   try{ obj = JSON.parse(text); }
   catch(e){ throw new Error("JSON non valido: " + (e?.message||e)); }
   if(!obj || typeof obj!=="object" || !Array.isArray(obj.workers)) throw new Error("File non valido (manca 'workers').");
+  if(Array.isArray(obj.depts) && obj.depts.length){ setDepts(obj.depts); try{ localStorage.setItem(STORE_DEPTS, JSON.stringify(DEPTS)); }catch{} }
   data.workers = obj.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
   for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
   data.week = (obj.week && typeof obj.week==="object") ? obj.week : {};
-  saveWorkers(); saveWeek(); if(cloudSeeded) cloudPushAll(); render();
+  saveWorkers(); saveWeek(); saveDepts(); if(cloudSeeded) cloudPushAll(); render();
 }
 async function importJson(file){ importJsonText(await file.text()); ioMsg("dati caricati"); }
 
@@ -676,6 +716,7 @@ function pdfNameLine(it){
   return s + "  —  " + desc;
 }
 function downloadDailyPDF(){
+  if(activeSection==="editor"){ ioMsg("Apri una scheda (Produzione o Amministrativa) per scaricare il PDF."); return; }
   const date=new Date();                 // PDF di OGGI
   const iso=toISO(date), wk=getISOWeekKey(date);
   const secLabel=(SECTIONS.find(s=>s.id===activeSection)?.label)||"";
@@ -767,6 +808,7 @@ function buildXlsx(rows){
   return zipStore(files);
 }
 function downloadWeeklyExcel(){
+  if(activeSection==="editor"){ ioMsg("Apri una scheda (Produzione o Amministrativa) per scaricare l'Excel."); return; }
   const days=weekDates(fromISO(anchorISO)).filter(d=>!isWeekend(d));   // esclude Sab/Dom
   const wkKey=getISOWeekKey(fromISO(anchorISO));
   const dd=d=>pad(d.getDate())+"/"+pad(d.getMonth()+1);
@@ -837,14 +879,20 @@ function onCloudValue(snap){
   }
   cloudSeeded=true;
   cloudStatus("☁️ Condivisione attiva (stanza: "+room+")","ok");
-  const incoming={ workers: val.workers ? (Array.isArray(val.workers)?val.workers:Object.values(val.workers)) : [], week:(val.week&&typeof val.week==="object")?val.week:{} };
-  if(JSON.stringify({w:data.workers.map(normWorker),k:data.week})===JSON.stringify({w:incoming.workers.map(normWorker),k:incoming.week})) return;
+  const incoming={
+    workers: val.workers ? (Array.isArray(val.workers)?val.workers:Object.values(val.workers)) : [],
+    week:(val.week&&typeof val.week==="object")?val.week:{},
+    depts: val.depts ? (Array.isArray(val.depts)?val.depts:Object.values(val.depts)) : null
+  };
+  const sameDepts = !incoming.depts || JSON.stringify(DEPTS)===JSON.stringify(incoming.depts.map(normDept));
+  if(sameDepts && JSON.stringify({w:data.workers.map(normWorker),k:data.week})===JSON.stringify({w:incoming.workers.map(normWorker),k:incoming.week})) return;
   if(expandedKey!==null){ pendingRemote=incoming; return; }   // non disturbare durante la modifica
   applyRemoteNow(incoming);
 }
 function applyRemoteNow(incoming){
   applyingRemote=true;
   try{
+    if(incoming.depts){ setDepts(incoming.depts); try{ localStorage.setItem(STORE_DEPTS, JSON.stringify(DEPTS)); }catch{} }
     data.workers=incoming.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
     for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
     data.week=incoming.week||{};
@@ -852,8 +900,9 @@ function applyRemoteNow(incoming){
   } finally { applyingRemote=false; }
   render();
 }
-function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{} }); }catch{} }
+function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{}, depts:DEPTS }); }catch{} }
 function cloudPushWorkers(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("workers").set(data.workers.map(normWorker)); }catch{} }
+function cloudPushDepts(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("depts").set(DEPTS); }catch{} }
 function cloudPushWeek(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("week").set(data.week||{}); }catch{} }
 function cloudPushRecord(wk,iso,wid){
   if(!cloudRef||applyingRemote||!cloudSeeded) return;
@@ -905,26 +954,54 @@ function changeStatus(wid,iso,status){
 /* ====== Render ====== */
 function renderTabs(){
   const t=$("tabs"); if(!t) return; t.innerHTML="";
-  for(const s of SECTIONS){
+  const tabs=SECTIONS.slice();
+  if(!isEmbed) tabs.push({ id:"editor", label:"⚙️ Editor" });   // nascosta nella versione colleghi
+  for(const s of tabs){
     const b=document.createElement("button"); b.type="button"; b.textContent=s.label;
     if(s.id===activeSection) b.classList.add("active");
     b.addEventListener("click",()=>setSection(s.id));
     t.appendChild(b);
   }
   const sub=$("subTitle");
-  if(sub) sub.textContent = activeSection==="divisione"
-    ? "Area Amministrativa (orario fisso 8:00–16:20). Trascina i badge tra Al lavoro e Assenze. Salvataggio automatico."
-    : "Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.";
-  const addT=$("addTitle");
-  if(addT) addT.textContent = activeSection==="divisione" ? "Aggiungi operatore" : "Aggiungi operaio";
+  if(sub) sub.textContent =
+      activeSection==="editor"   ? "Editor: gestisci i reparti e aggiungi le persone. (Questa scheda non compare nella versione per i colleghi.)"
+    : activeSection==="divisione"? "Area Amministrativa (orario fisso 8:00–16:20). Trascina i badge tra Al lavoro e Assenze. Salvataggio automatico."
+    :                              "Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.";
 }
 function render(){
+  if(isEmbed && activeSection==="editor") activeSection="produzione";
   renderTabs();
   renderWeekLabel();
-  renderWeek();
+  if(activeSection==="editor"){
+    $("week").style.display="none";
+    $("editorPanel").style.display="";
+    renderEditorPanel();
+  }else{
+    $("editorPanel").style.display="none";
+    $("week").style.display="";
+    renderWeek();
+  }
   $("jsStatus").textContent = "OK";
   // applica un aggiornamento remoto in coda quando la scheda è chiusa
   if(expandedKey===null && pendingRemote){ const r=pendingRemote; pendingRemote=null; applyRemoteNow(r); }
+}
+function renderEditorPanel(){
+  fillAddMenus();
+  const dl=$("deptList"); if(!dl) return; dl.innerHTML="";
+  for(const d of DEPTS){
+    const row=document.createElement("div"); row.className="deptRow";
+    const info=document.createElement("div"); info.className="deptInfo";
+    const b=document.createElement("b"); b.textContent=d.name;
+    const meta=document.createElement("span"); meta.className="small muted";
+    const caps=[]; if(d.allowDeloc!==false) caps.push("🏠"); if(d.allowG192) caps.push("⏰ G192");
+    const secLab=d.section==="divisione" ? "Amministrativa" : "Produzione";
+    meta.textContent = "  "+secLab + (caps.length? "  ·  "+caps.join("  ") : "");
+    info.appendChild(b); info.appendChild(meta);
+    const del=document.createElement("button"); del.type="button"; del.className="danger"; del.textContent="Elimina";
+    del.addEventListener("click",()=>deleteDept(d.id));
+    row.appendChild(info); row.appendChild(del);
+    dl.appendChild(row);
+  }
 }
 function renderWeekLabel(){
   const days=weekDates(fromISO(anchorISO));
@@ -1059,8 +1136,8 @@ function buildBadge(worker,rec,iso,curShift,date){
     nm.title = worker.name + " — " + statusLabel(st);
   }
   head.appendChild(nm);
-  // toggle Turno G192 (solo Reparto Stampa) — mostrato PRIMA del delocalizzato
-  if(worker.deptId==="S" && !isWeekend(date)){
+  // toggle Turno G192 (reparti abilitati) — mostrato PRIMA del delocalizzato
+  if(deptAllowsG192(worker) && !isWeekend(date)){
     const gBtn=document.createElement("button");
     gBtn.type="button";
     gBtn.className="g192Btn"+(g192?" on":"");
@@ -1074,18 +1151,20 @@ function buildBadge(worker,rec,iso,curShift,date){
     head.appendChild(gBtn);
   }
 
-  // toggle delocalizzato direttamente sul badge (senza aprire la scheda)
-  const delBtn=document.createElement("button");
-  delBtn.type="button";
-  delBtn.className="delBtn"+(isDel?" on":"");
-  delBtn.textContent="🏠";
-  delBtn.title=isDel?"Delocalizzato: clic per togliere":"Segna come delocalizzato";
-  if(locked){ delBtn.style.pointerEvents="none"; }
-  else{
-    delBtn.addEventListener("mousedown",e=>e.stopPropagation());
-    delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
+  // toggle delocalizzato direttamente sul badge (solo reparti abilitati)
+  if(deptAllowsDeloc(worker)){
+    const delBtn=document.createElement("button");
+    delBtn.type="button";
+    delBtn.className="delBtn"+(isDel?" on":"");
+    delBtn.textContent="🏠";
+    delBtn.title=isDel?"Delocalizzato: clic per togliere":"Segna come delocalizzato";
+    if(locked){ delBtn.style.pointerEvents="none"; }
+    else{
+      delBtn.addEventListener("mousedown",e=>e.stopPropagation());
+      delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
+    }
+    head.appendChild(delBtn);
   }
-  head.appendChild(delBtn);
 
   if(!locked) head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
   el.appendChild(head);
@@ -1188,18 +1267,48 @@ function setupDnD(){
   });
 }
 
-/* ====== Aggiungi operaio ====== */
+/* ====== Aggiungi operaio / Reparti ====== */
 function fillAddMenus(){
-  const ad=$("addDept"); ad.innerHTML="";
-  const list=DEPTS.filter(d=>d.section===activeSection);
-  list.forEach((d,i)=>{ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; if(i===0||d.id==="P") o.selected=true; ad.appendChild(o); });
+  const ad=$("addDept"); if(!ad) return; ad.innerHTML="";
+  // nell'Editor mostra tutti i reparti, raggruppati per area; altrove solo la scheda attiva
+  const inEditor = (activeSection!=="produzione" && activeSection!=="divisione");
+  const list = inEditor ? DEPTS.slice() : DEPTS.filter(d=>d.section===activeSection);
+  list.forEach((d,i)=>{ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name+(inEditor?(d.section==="divisione"?" (Ammin.)":" (Produz.)"):""); if(i===0) o.selected=true; ad.appendChild(o); });
 }
 function addWorker(){
   const name=normName($("addName").value);
   if(!name){ alert("Inserisci un nome."); return; }
-  data.workers.push({ id:uuid(), name, deptId:$("addDept").value, baseTeam:$("addTeam").value, isLeader:$("addLeader").value==="1" });
+  const deptId=$("addDept").value || (DEPTS[0]&&DEPTS[0].id);
+  data.workers.push({ id:uuid(), name, deptId, baseTeam:$("addTeam").value, isLeader:$("addLeader").value==="1" });
   saveWorkers();
   $("addName").value="";
+  render();
+}
+function addDeptFromForm(){
+  const name=normName($("ndName").value);
+  if(!name){ alert("Inserisci il nome del reparto."); return; }
+  if(DEPTS.some(d=>d.name.toLowerCase()===name.toLowerCase())){ alert("Esiste già un reparto con questo nome."); return; }
+  const dep=normDept({
+    id:uuid(),
+    name,
+    section:$("ndSection").value,
+    allowDeloc:$("ndDeloc").value==="1",
+    allowG192:$("ndG192").value==="1",
+    builtin:false
+  });
+  DEPTS.push(dep);
+  saveDepts();
+  $("ndName").value="";
+  render();
+}
+function deleteDept(id){
+  const d=deptById(id); if(!d) return;
+  if(DEPTS.length<=1){ alert("Deve restare almeno un reparto."); return; }
+  const n=data.workers.filter(w=>w.deptId===id).length;
+  if(n>0){ alert("Il reparto \""+d.name+"\" contiene "+n+" person"+(n===1?"a":"e")+". Spostale o eliminale prima di rimuovere il reparto."); return; }
+  if(!confirm("Eliminare il reparto \""+d.name+"\"?")) return;
+  DEPTS=DEPTS.filter(x=>x.id!==id);
+  saveDepts();
   render();
 }
 
@@ -1212,6 +1321,8 @@ function resetWeek(){
 
 /* ====== Init ====== */
 function bootstrap(){
+  const dp=loadStore(STORE_DEPTS);
+  if(Array.isArray(dp) && dp.length){ setDepts(dp); } else { setDepts(DEFAULT_DEPTS); saveDepts(); }
   const w=loadStore(STORE_WORKERS);
   if(Array.isArray(w) && w.length){ data.workers=w.map(normWorker); }
   else{
@@ -1263,6 +1374,8 @@ function init(){
     $("resetBtn").addEventListener("click",resetWeek);
     $("addBtn").addEventListener("click",addWorker);
     $("addName").addEventListener("keydown",e=>{ if(e.key==="Enter") addWorker(); });
+    $("ndAdd").addEventListener("click",addDeptFromForm);
+    $("ndName").addEventListener("keydown",e=>{ if(e.key==="Enter") addDeptFromForm(); });
 
     // Cloud (Firebase): modale di configurazione
     const cm=$("cloudModal");
