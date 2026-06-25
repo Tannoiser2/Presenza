@@ -751,7 +751,7 @@ function hhStartMin(h){ const m=String(h).split(/[–-]/)[0].trim().match(/(\d{1
 function downloadDailyPDF(){
   const date=new Date();                 // PDF di OGGI — sempre AREA PRODUZIONE
   const iso=toISO(date), wk=getISOWeekKey(date);
-  const ORANGE=[0.99,0.75,0], BLUE=[0.36,0.61,0.84], GRAY=[0.62,0.62,0.62], LINE=[0.55,0.55,0.55];
+  const ORANGE=[0.99,0.75,0], BLUE=[0.36,0.61,0.84], GRAY=[0.62,0.62,0.62], GRAYCELL=[0.82,0.82,0.82], LINE=[0.55,0.55,0.55];
   const inProd=w=>sectionOf(w.deptId)==="produzione";
   const recOf=w=>getRec(wk,iso,w.id);
   function orarioOf(w,rec){
@@ -761,10 +761,10 @@ function downloadDailyPDF(){
     if(isNoShift(w)) return hoursFor(w.deptId,"morning");
     return hoursFor(w.deptId, sh==="afternoon"?"afternoon":"morning");
   }
-  function fillOf(w,rec){           // colore del nome: arancio=mattina, blu=pomeriggio, niente=fisso/assente
+  function fillOf(w,rec){           // colore casella: arancio=mattina, blu=pomeriggio, grigio=senza turno
     const sh=effShift(w,rec,date);
     if(isAbsentStatus(rec.status||"PRESENTE")) return null;
-    if(isNoShift(w)) return null;
+    if(isNoShift(w)) return GRAYCELL;
     if(sh==="morning") return ORANGE;
     if(sh==="afternoon") return BLUE;
     return null;
@@ -787,10 +787,10 @@ function downloadDailyPDF(){
     return lines;
   }
 
-  // colonne orari distinte (unificate per orario uguale, ordinate per ora d'inizio)
+  // colonne orari distinte (unificate per orario uguale); i "senza turno" (orario fisso) per primi, poi per ora d'inizio
   const orariMap=new Map();
-  for(const w of data.workers){ if(!inProd(w)) continue; const o=orarioOf(w,recOf(w)); if(o){ const k=hKey(o); if(!orariMap.has(k)) orariMap.set(k,{disp:o,start:hhStartMin(o)}); } }
-  const cols=[...orariMap.values()].sort((a,b)=>a.start-b.start).map(v=>v.disp);
+  for(const w of data.workers){ if(!inProd(w)) continue; const o=orarioOf(w,recOf(w)); if(o){ const k=hKey(o), fx=isNoShift(w); if(!orariMap.has(k)) orariMap.set(k,{disp:o,start:hhStartMin(o),fixed:fx}); else if(fx) orariMap.get(k).fixed=true; } }
+  const cols=[...orariMap.values()].sort((a,b)=>((b.fixed?1:0)-(a.fixed?1:0))||(a.start-b.start)).map(v=>v.disp);
 
   const PW=595.28, PH=841.89, ML=26, MR=26, minNote=110;
   let wName=148, wTime=24, wAss=22, wVar=80;
@@ -801,12 +801,13 @@ function downloadDailyPDF(){
   const cmd=[];
 
   // intestazione
-  let y=38;
-  pdfTextC(cmd, PW/2, y, 12, true, "DIVISIONE EDITORIA E STAMPA — AREA PRODUZIONE"); y+=20;
+  let y=30;
+  pdfTextC(cmd, PW/2, y, 15, true, "Divisione Editoria e Stampa"); y+=15;
+  pdfTextC(cmd, PW/2, y, 10, true, "Area Produzione"); y+=20;
   pdfTextC(cmd, PW/2, y, 17, true, dateLabelIT(date));
   const teamM=isMorningTeam("A",date)?"A":"B";
-  pdfTextCol(cmd, PW-MR-22, 44, 26, true, teamM, BLUE);
-  pdfTextC(cmd, PW-MR-9, 58, 6.5, false, "turno mattina");
+  pdfTextCol(cmd, PW-MR-22, 38, 26, true, teamM, BLUE);
+  pdfTextC(cmd, PW-MR-9, 52, 6.5, false, "turno mattina");
   y+=14;
 
   // intestazione colonne
@@ -819,7 +820,7 @@ function downloadDailyPDF(){
   pdfRect(cmd, xNote, hT, wNote, hH, null, LINE); pdfTextC(cmd, xNote+wNote/2, hT+15, 8, true, "Note");
   y=hT+hH;
 
-  const rh=15, bh=13, bhS=11, wTot=(PW-MR)-ML;
+  const rh=Math.max(18, Math.round(wTime)), bh=13, bhS=11, wTot=(PW-MR)-ML;  // righe ~quadrate (altezza = larghezza colonna orario)
   function band(label){
     pdfRect(cmd, ML, y, wTot, bh, GRAY, LINE);
     pdfTextCol(cmd, ML+6, y+bh-3.5, 8, true, label.toUpperCase(), [1,1,1]);
@@ -853,9 +854,8 @@ function downloadDailyPDF(){
     // orari (cella evidenziata sul turno della persona)
     const ok=orarioOf(w,rec); const okk=ok?hKey(ok):null;
     cols.forEach((h,i)=>{ const cx=xTime+i*wTime; const f=(!absent && okk===hKey(h))?(fill||ORANGE):null; pdfRect(cmd,cx,top,wTime,rowH,f,LINE); });
-    // Ass. → casella nera se assente
-    pdfRect(cmd, xAss, top, wAss, rowH, null, LINE);
-    if(absent){ const side=Math.min(wAss-8,12), cx=xAss+wAss/2, cy=top+rowH/2; pdfRect(cmd, cx-side/2, cy-side/2, side, side, [0,0,0], null); }
+    // Ass. → cella tutta nera se assente
+    pdfRect(cmd, xAss, top, wAss, rowH, absent?[0,0,0]:null, LINE);
     // Variazione Turno
     pdfRect(cmd, xVar, top, wVar, rowH, null, LINE);
     let vt="";
