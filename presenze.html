@@ -726,40 +726,145 @@ function pdfNameLine(it){
   const desc=placementText(w,it.rec,it._date);
   return s + "  —  " + desc;
 }
-function downloadDailyPDF(){
-  if(activeSection==="editor"){ ioMsg("Apri una scheda (Produzione o Amministrativa) per scaricare il PDF."); return; }
-  const date=new Date();                 // PDF di OGGI
-  const iso=toISO(date), wk=getISOWeekKey(date);
-  const secLabel=(SECTIONS.find(s=>s.id===activeSection)?.label)||"";
-  const cmd=[]; let y=46;
-  pdfText(cmd,40,y,16,true,"Presenze — "+secLabel); y+=20;
-  pdfText(cmd,40,y,12,false,dateLabelIT(date)); y+=24;
+/* --- primitive di disegno PDF (rettangoli, righe, testo colorato/centrato) --- */
+function pdfRect(cmd,x,yTop,w,h,fill,stroke){
+  const y=(841.89-(yTop+h));
+  let s="";
+  if(fill) s+=`${fill[0]} ${fill[1]} ${fill[2]} rg `;
+  s+="0.6 w ";
+  if(stroke) s+=`${stroke[0]} ${stroke[1]} ${stroke[2]} RG `;
+  s+=`${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re `;
+  s+= (fill&&stroke)?"B":(fill?"f":(stroke?"S":"n"));
+  cmd.push(s+" 0 0 0 rg 0 0 0 RG");
+}
+function pdfLine(cmd,x1,yTop1,x2,yTop2){
+  cmd.push(`0 0 0 RG ${x1.toFixed(2)} ${(841.89-yTop1).toFixed(2)} m ${x2.toFixed(2)} ${(841.89-yTop2).toFixed(2)} l S`);
+}
+function pdfTextCol(cmd,x,yTop,size,bold,text,rgb){
+  if(rgb) cmd.push(`${rgb[0]} ${rgb[1]} ${rgb[2]} rg`);
+  pdfText(cmd,x,yTop,size,bold,text);
+  if(rgb) cmd.push("0 0 0 rg");
+}
+function pdfTextC(cmd,xc,yTop,size,bold,text,rgb){ const w=pdfLatin1(text).length*size*0.5; pdfTextCol(cmd,xc-w/2,yTop,size,bold,text,rgb); }
+function hhStartMin(h){ const m=String(h).split(/[–-]/)[0].trim().match(/(\d{1,2})[:.](\d{2})/); return m?(+m[1]*60+ +m[2]):9999; }
 
-  const shifts=shiftsFor(date);
-  const buckets={}; for(const s of shifts) buckets[s.id]=[];
-  for(const w of data.workers){
-    if(sectionOf(w.deptId)!==activeSection) continue;
-    const rec=getRec(wk,iso,w.id);
-    const it={worker:w,rec,_date:date};
-    (buckets[effShift(w,rec,date)]||buckets[shifts[shifts.length-1].id]).push(it);
+function downloadDailyPDF(){
+  const date=new Date();                 // PDF di OGGI — sempre AREA PRODUZIONE
+  const iso=toISO(date), wk=getISOWeekKey(date);
+  const ORANGE=[0.99,0.75,0], BLUE=[0.36,0.61,0.84], GRAY=[0.62,0.62,0.62], LINE=[0.55,0.55,0.55];
+  const inProd=w=>sectionOf(w.deptId)==="produzione";
+  const recOf=w=>getRec(wk,iso,w.id);
+  function orarioOf(w,rec){
+    const sh=effShift(w,rec,date);
+    if(sh==="absent"||sh==="home"||sh==="work") return null;
+    if(isG192(w,rec)) return G192_HOURS;
+    if(isNoShift(w)) return hoursFor(w.deptId,"morning");
+    return hoursFor(w.deptId, sh==="afternoon"?"afternoon":"morning");
   }
-  for(const sh of shifts){
-    const items=buckets[sh.id];
-    if(y>800){ pdfText(cmd,40,y,9,false,"(continua…)"); break; }
-    pdfText(cmd,40,y,13,true,sh.label.toUpperCase()+"  ("+items.length+")"); y+=17;
-    if(!items.length){ pdfText(cmd,52,y,10,false,"—"); y+=15; continue; }
-    if(sh.split){
-      for(const g of splitGroups(items,sh.id)){
-        pdfText(cmd,52,y,11,true,(g.hours?g.label+" ("+g.hours+")":g.label)); y+=14;
-        for(const it of sortLeaderFirst(g.items)){ if(y>815) break; pdfText(cmd,64,y,10,false,pdfNameLine(it)); y+=13; }
-        y+=4;
-      }
-    }else{
-      for(const it of sortLeaderFirst(items)){ if(y>815) break; pdfText(cmd,52,y,10,false,pdfNameLine(it)); y+=13; }
-    }
-    y+=8;
+  function fillOf(w,rec){           // colore del nome: arancio=mattina, blu=pomeriggio, niente=fisso/assente
+    const sh=effShift(w,rec,date);
+    if(isAbsentStatus(rec.status||"PRESENTE")) return null;
+    if(isNoShift(w)) return null;
+    if(sh==="morning") return ORANGE;
+    if(sh==="afternoon") return BLUE;
+    return null;
   }
-  downloadBlob(`Presenze_${activeSection}_${iso}.pdf`, buildPdf(cmd.join("\n")+"\n"), "application/pdf");
+  const rankOfW=w=>(w.isChief?0:(w.isLeader?1:2));
+  const sortW=ws=>ws.slice().sort((a,b)=>(rankOfW(a)-rankOfW(b))||a.name.localeCompare(b.name));
+
+  // colonne orari distinte (ordinate per ora d'inizio)
+  const orariMap=new Map();
+  for(const w of data.workers){ if(!inProd(w)) continue; const o=orarioOf(w,recOf(w)); if(o) orariMap.set(o,hhStartMin(o)); }
+  const cols=[...orariMap.keys()].sort((a,b)=>orariMap.get(a)-orariMap.get(b));
+
+  const PW=595.28, PH=841.89, ML=26, MR=26, minNote=92;
+  let wName=150, wTime=24, wAss=22, wVar=86;
+  const availT=(PW-MR)-ML-wName-wAss-wVar-minNote;
+  if(cols.length>0 && cols.length*wTime>availT) wTime=Math.max(13, availT/cols.length);
+  const xName=ML, xTime=xName+wName, xAss=xTime+cols.length*wTime, xVar=xAss+wAss, xNote=xVar+wVar;
+  const wNote=(PW-MR)-xNote;
+  const cmd=[];
+
+  // intestazione
+  let y=38;
+  pdfTextC(cmd, PW/2, y, 12, true, "DIVISIONE EDITORIA E STAMPA — AREA PRODUZIONE"); y+=20;
+  pdfTextC(cmd, PW/2, y, 17, true, dateLabelIT(date));
+  const teamM=isMorningTeam("A",date)?"A":"B";
+  pdfTextCol(cmd, PW-MR-22, 44, 26, true, teamM, BLUE);
+  pdfTextC(cmd, PW-MR-9, 58, 6.5, false, "turno mattina");
+  y+=14;
+
+  // intestazione colonne
+  const hT=y, hH=24;
+  pdfRect(cmd, xName, hT, wName, hH, null, LINE);
+  pdfText(cmd, xName+4, hT+15, 8, true, "Nominativo");
+  cols.forEach((h,i)=>{ const cx=xTime+i*wTime; pdfRect(cmd,cx,hT,wTime,hH,null,LINE); const p=String(h).split(/[–-]/); pdfTextC(cmd,cx+wTime/2,hT+10,6.3,false,(p[0]||"").trim()); pdfTextC(cmd,cx+wTime/2,hT+20,6.3,false,(p[1]||"").trim()); });
+  pdfRect(cmd, xAss, hT, wAss, hH, null, LINE); pdfTextC(cmd, xAss+wAss/2, hT+15, 7, true, "Ass.");
+  pdfRect(cmd, xVar, hT, wVar, hH, null, LINE); pdfTextC(cmd, xVar+wVar/2, hT+15, 7, true, "Variazione Turno");
+  pdfRect(cmd, xNote, hT, wNote, hH, null, LINE); pdfTextC(cmd, xNote+wNote/2, hT+15, 8, true, "Note");
+  y=hT+hH;
+
+  const rh=15, bh=13, wTot=(PW-MR)-ML;
+  function band(label){
+    pdfRect(cmd, ML, y, wTot, bh, GRAY, LINE);
+    pdfTextCol(cmd, ML+6, y+bh-3.5, 8, true, label.toUpperCase(), [1,1,1]);
+    y+=bh;
+  }
+  function rowFor(w){
+    const rec=recOf(w);
+    const sh=effShift(w,rec,date);
+    const absent=isAbsentStatus(rec.status||"PRESENTE");
+    const st=rec.status||"PRESENTE";
+    const fill=fillOf(w,rec);
+    const top=y;
+    // nome
+    pdfRect(cmd, xName, top, wName, rh, fill, LINE);
+    let nm=w.name+(w.isChief?" (C.O.)":"");
+    pdfTextCol(cmd, xName+4, top+rh-4.5, 8.5, (w.isChief||w.isLeader), nm, null);
+    // orari
+    const o=orarioOf(w,rec);
+    cols.forEach((h,i)=>{ const cx=xTime+i*wTime; const f=(!absent && o===h)?(fill||ORANGE):null; pdfRect(cmd,cx,top,wTime,rh,f,LINE); });
+    // Ass.
+    pdfRect(cmd, xAss, top, wAss, rh, null, LINE);
+    if(absent) pdfTextC(cmd, xAss+wAss/2, top+rh-4.5, 9, true, "X");
+    // Variazione Turno
+    pdfRect(cmd, xVar, top, wVar, rh, null, LINE);
+    let vt="";
+    if(absent) vt="Assente";
+    else if(!isNoShift(w)&&!isWeekend(date)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,date)) vt="cambio turno";
+    if(vt) pdfTextC(cmd, xVar+wVar/2, top+rh-4.5, 8, false, vt);
+    // Note
+    pdfRect(cmd, xNote, top, wNote, rh, null, LINE);
+    const notes=[];
+    if(!absent && (rec.deloc||st==="DELOCALIZZATO")) notes.push("DELOCALIZZATO");
+    if(st==="TELELAVORO") notes.push("TELELAVORO");
+    if(absent) notes.push(statusLabel(st).toUpperCase());
+    else if(st!=="PRESENTE"&&st!=="DELOCALIZZATO"&&st!=="TELELAVORO") notes.push(statusLabel(st));
+    if((rec.note||"").trim()) notes.push(rec.note.trim());
+    if(notes.length) pdfTextC(cmd, xNote+wNote/2, top+rh-4.5, 7.3, false, notes.join(" · "));
+    y+=rh;
+  }
+  const stop=()=>y>PH-60;
+
+  // Capo Officina, poi i reparti di produzione (in ordine), saltando il capo
+  const chiefs=sortW(data.workers.filter(w=>inProd(w)&&w.isChief));
+  if(chiefs.length && !stop()){ band("Capo Officina"); for(const w of chiefs){ if(stop()) break; rowFor(w); } }
+  for(const d of DEPTS){
+    if(d.section!=="produzione") continue;
+    const list=sortW(data.workers.filter(w=>w.deptId===d.id && !w.isChief));
+    if(!list.length) continue;
+    if(stop()) break;
+    band(d.name);
+    for(const w of list){ if(stop()){ pdfText(cmd, ML, y+10, 8, false, "(continua…)"); break; } rowFor(w); }
+  }
+
+  // firme
+  const fy=Math.min(y+40, PH-30);
+  pdfText(cmd, ML, fy, 9, true, "IL TITOLARE DI DIVISIONE");
+  pdfText(cmd, PW-MR-150, fy-14, 9, true, "IL CAPO OFFICINA");
+  pdfLine(cmd, PW-MR-150, fy, PW-MR, fy);
+
+  downloadBlob(`Presenze_produzione_${iso}.pdf`, buildPdf(cmd.join("\n")+"\n"), "application/pdf");
   ioMsg("PDF giornaliero scaricato");
 }
 
