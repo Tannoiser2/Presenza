@@ -898,28 +898,62 @@ function zipStore(files){
   return out;
 }
 function colLetter(n){ let s=""; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
-function sheetXml(rows){
+/* griglia con stili e celle unite */
+function sheetXmlStyled(grid, merges, cols){
+  let colsXml="";
+  if(cols&&cols.length) colsXml="<cols>"+cols.map(c=>`<col min="${c.min}" max="${c.max}" width="${c.w}" customWidth="1"/>`).join("")+"</cols>";
   let sd="";
-  rows.forEach((row,ri)=>{
+  grid.forEach((row,ri)=>{
     const r=ri+1; sd+=`<row r="${r}">`;
     row.forEach((cell,ci)=>{
+      if(cell==null) return;
       const ref=colLetter(ci+1)+r;
-      const s=cell.bold?' s="1"':'';
-      sd+=`<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${xmlEsc(cell.t)}</t></is></c>`;
+      const s=cell.s?` s="${cell.s}"`:"";
+      const t=(cell.t==null)?"":String(cell.t);
+      sd+=`<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${xmlEsc(t)}</t></is></c>`;
     });
     sd+="</row>";
   });
+  let mg="";
+  if(merges&&merges.length) mg=`<mergeCells count="${merges.length}">`+merges.map(m=>`<mergeCell ref="${m}"/>`).join("")+"</mergeCells>";
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
-    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'+sd+'</sheetData></worksheet>';
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+colsXml+'<sheetData>'+sd+'</sheetData>'+mg+'</worksheet>';
 }
-function buildXlsx(rows){
+const XLS_STYLES='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+'<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>'+
+'<fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFC6EFCE"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFBDD7EE"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFFFC7CE"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFFFD966"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FF9DC3E6"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFA6A6A6"/></patternFill></fill></fills>'+
+'<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>'+
+'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+'<cellXfs count="13">'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
+'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
+'<xf numFmtId="0" fontId="2" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
+'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'</cellXfs></styleSheet>';
+function buildXlsx(grid, merges, cols){
   const files=[
     {name:"[Content_Types].xml", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
     {name:"_rels/.rels", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
     {name:"xl/workbook.xml", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Prospetto" sheetId="1" r:id="rId1"/></sheets></workbook>'},
     {name:"xl/_rels/workbook.xml.rels", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},
-    {name:"xl/styles.xml", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>'},
-    {name:"xl/worksheets/sheet1.xml", data:sheetXml(rows)}
+    {name:"xl/styles.xml", data:XLS_STYLES},
+    {name:"xl/worksheets/sheet1.xml", data:sheetXmlStyled(grid,merges,cols)}
   ];
   return zipStore(files);
 }
@@ -927,30 +961,62 @@ function downloadWeeklyExcel(){
   if(activeSection==="editor"){ ioMsg("Apri una scheda (Produzione o Amministrativa) per scaricare l'Excel."); return; }
   const days=weekDates(fromISO(anchorISO)).filter(d=>!isWeekend(d));   // esclude Sab/Dom
   const wkKey=getISOWeekKey(fromISO(anchorISO));
-  const dd=d=>pad(d.getDate())+"/"+pad(d.getMonth()+1);
   const secLabel=(SECTIONS.find(s=>s.id===activeSection)?.label)||"";
-  const rows=[];
-  rows.push([{t:"Prospetto settimanale ("+secLabel+") — Settimana "+wkKey, bold:true}]);
-  const header=[{t:"Nominativo", bold:true}];
-  days.forEach((d,i)=>header.push({t:DOW[i]+" "+dd(d), bold:true}));
-  rows.push(header);
+  const rankW=w=>(w.isChief?0:(w.isLeader?1:2));
+  const sortW=ws=>ws.slice().sort((a,b)=>(rankW(a)-rankW(b))||a.name.localeCompare(b.name));
+  const nCols=1+days.length, lastCol=colLetter(nCols);
+
+  function cellsFor(w,rec,d){
+    const sh=effShift(w,rec,d);
+    const st=rec.status||"PRESENTE";
+    const absent=isAbsentStatus(st);
+    const deloc=rec.deloc||st==="DELOCALIZZATO";
+    let stT,stS;
+    if(absent){ stT=statusLabel(st).toUpperCase(); stS=7; }
+    else if(st==="TELELAVORO"){ stT="TELELAVORO"; stS=6; }
+    else if(deloc){ stT="DELOCALIZZATO"; stS=6; }
+    else { stT="IN PRESENZA"; stS=5; }
+    let tuT="", tuS=11;
+    if(!absent){
+      if(isWeekend(d)){ tuT=sh==="work"?"Al lavoro":"A casa"; tuS=11; }
+      else if(isG192(w,rec)){ tuT="Turno G192 ("+G192_HOURS+")"; tuS=9; }
+      else if(isNoShift(w)){ tuT="Fisso ("+hoursFor(w.deptId,"morning")+")"; tuS=11; }
+      else if(sh==="morning"){ tuT="Mattina ("+hoursFor(w.deptId,"morning")+")"; tuS=9; }
+      else if(sh==="afternoon"){ tuT="Pomeriggio ("+hoursFor(w.deptId,"afternoon")+")"; tuS=10; }
+      else if(sh==="present"){ tuT="Al lavoro ("+(hoursFor(w.deptId,"present")||"8:00–16:20")+")"; tuS=11; }
+    }
+    const notes=[];
+    const changed=!isNoShift(w)&&!isWeekend(d)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,d);
+    if(changed) notes.push("cambio turno");
+    if(!absent && st!=="PRESENTE" && st!=="DELOCALIZZATO" && st!=="TELELAVORO") notes.push(statusLabel(st));
+    if((rec.note||"").trim()) notes.push(rec.note.trim());
+    return {stT,stS,tuT,tuS,noT:notes.join(" · ")};
+  }
+
+  const grid=[], merges=[];
+  grid.push([{t:"PROSPETTO SETTIMANALE — "+secLabel+" — Settimana "+wkKey, s:2}]); merges.push("A1:"+lastCol+"1");
+  const hdr=[{t:"Nominativo", s:1}]; days.forEach(d=>hdr.push({t:dateLabelIT(d), s:1})); grid.push(hdr);
   for(const dpt of DEPTS){
     if(dpt.section!==activeSection) continue;
-    const list=sortLeaderFirst(data.workers.filter(w=>w.deptId===dpt.id).map(w=>({worker:w})));
+    const list=sortW(data.workers.filter(w=>w.deptId===dpt.id));
     if(!list.length) continue;
-    rows.push([{t:dpt.name, bold:true}]);
-    for(const it of list){
-      const w=it.worker;
-      const nm=(w.isChief?"★ ":(w.isLeader?"• ":""))+w.name+(w.isChief?" (Capo Officina)":"");
-      const row=[{t:nm}];
+    const br=grid.length+1; const bandCells=[{t:dpt.name, s:3}]; for(let i=1;i<nCols;i++) bandCells.push({t:"", s:3}); grid.push(bandCells);
+    merges.push("A"+br+":"+lastCol+br);
+    for(const w of list){
+      const r0=grid.length+1;
+      const rowS=[{t:(w.isChief?"★ ":(w.isLeader?"• ":""))+w.name, s:4}];
+      const rowT=[{t:"", s:4}], rowN=[{t:"", s:4}];
       for(const d of days){
         const rec=getRec(getISOWeekKey(d),toISO(d),w.id);
-        row.push({t:placementText(w,rec,d)});
+        const c=cellsFor(w,rec,d);
+        rowS.push({t:c.stT, s:c.stS}); rowT.push({t:c.tuT, s:c.tuS}); rowN.push({t:c.noT, s:12});
       }
-      rows.push(row);
+      grid.push(rowS); grid.push(rowT); grid.push(rowN);
+      merges.push("A"+r0+":A"+(r0+2));
     }
   }
-  downloadBlob(`Prospetto_${activeSection}_${wkKey}.xlsx`, buildXlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  const cols=[{min:1,max:1,w:24}]; for(let i=2;i<=nCols;i++) cols.push({min:i,max:i,w:24});
+  downloadBlob(`Prospetto_${activeSection}_${wkKey}.xlsx`, buildXlsx(grid,merges,cols), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   ioMsg("Excel settimanale scaricato");
 }
 
