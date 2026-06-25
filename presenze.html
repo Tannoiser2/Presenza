@@ -820,15 +820,15 @@ function downloadDailyPDF(){
   pdfRect(cmd, xNote, hT, wNote, hH, null, LINE); pdfTextC(cmd, xNote+wNote/2, hT+15, 8, true, "Note");
   y=hT+hH;
 
-  const rh=Math.max(18, Math.round(wTime)), bh=13, bhS=11, wTot=(PW-MR)-ML;  // righe ~quadrate (altezza = larghezza colonna orario)
+  const rh=Math.max(18, Math.round(wTime)), bh=17, bhS=12, gap=6, wTot=(PW-MR)-ML;  // righe ~quadrate; gap tra reparti
   function band(label){
     pdfRect(cmd, ML, y, wTot, bh, GRAY, LINE);
-    pdfTextCol(cmd, ML+6, y+bh-3.5, 8, true, label.toUpperCase(), [1,1,1]);
+    pdfTextC(cmd, ML+wTot/2, y+bh-5, 9.5, true, label.toUpperCase(), [0,0,0]);
     y+=bh;
   }
   function subBand(label){
     pdfRect(cmd, ML, y, wTot, bhS, [0.86,0.86,0.86], LINE);
-    pdfTextCol(cmd, ML+18, y+bhS-3, 7, true, label, [0.1,0.1,0.1]);
+    pdfTextC(cmd, ML+wTot/2, y+bhS-3.5, 7.5, true, label, [0.1,0.1,0.1]);
     y+=bhS;
   }
   function rowFor(w){
@@ -850,7 +850,7 @@ function downloadDailyPDF(){
     const top=y, midBase=top+rowH/2+3;
     // nome
     pdfRect(cmd, xName, top, wName, rowH, fill, LINE);
-    pdfTextCol(cmd, xName+4, midBase, 8.5, (w.isChief||w.isLeader), w.name+(w.isChief?" (C.O.)":""), null);
+    pdfTextCol(cmd, xName+4, midBase, 10, (w.isChief||w.isLeader), w.name+(w.isChief?" (C.O.)":""), null);
     // orari (cella evidenziata sul turno della persona)
     const ok=orarioOf(w,rec); const okk=ok?hKey(ok):null;
     cols.forEach((h,i)=>{ const cx=xTime+i*wTime; const f=(!absent && okk===hKey(h))?(fill||ORANGE):null; pdfRect(cmd,cx,top,wTime,rowH,f,LINE); });
@@ -889,6 +889,7 @@ function downloadDailyPDF(){
     }else{
       for(const w of sortW(members)){ if(stop()){ cont(); break; } rowFor(w); }
     }
+    y+=gap;   // piccola spaziatura tra un reparto e l'altro
   }
 
   // firme
