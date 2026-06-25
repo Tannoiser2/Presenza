@@ -38,6 +38,10 @@
   .day{ flex:1 0 215px; min-width:215px; max-width:340px; border:1px solid var(--line); border-radius:14px; background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
   .day.today{ box-shadow:0 0 0 2px rgba(46,204,113,.45); background:rgba(46,204,113,.12); }
   .day.today .dayHead{ background:rgba(46,204,113,.18); }
+  .day.holiday .dayHead{ background:rgba(255,107,107,.20); }
+  .festBtn{ margin-top:5px; border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:999px; padding:2px 9px; font-size:10px; font-weight:700; cursor:pointer; }
+  .festBtn:hover{ color:var(--text); }
+  .festBtn.on{ background:rgba(255,107,107,.22); border-color:rgba(255,107,107,.6); color:#ffd1d1; }
 
   /* colonna weekend collassabile */
   .weekendWrap{ display:flex; align-items:stretch; gap:10px; flex:0 0 auto; }
@@ -242,6 +246,12 @@
       <button id="addBtn" class="primary">Aggiungi</button>
     </div>
   </div>
+
+  <div class="addbox">
+    <div class="small" style="font-weight:800; margin-bottom:8px;">Giorni festivi</div>
+    <div class="small muted" style="margin-bottom:8px">Imposta in automatico le festività nazionali italiane e il patrono di Roma (29 giugno). Puoi comunque attivare/disattivare il singolo giorno dal calendario (pulsante “Festivo” sotto la data).</div>
+    <button id="holRome" class="primary">🎄 Imposta festivi (Italia + Roma)</button>
+  </div>
 </div>
 
 <div class="status">Stato: <b id="jsStatus">—</b> <span id="ioStatus" class="muted"></span> <span id="fileLink" class="muted"></span></div>
@@ -365,9 +375,30 @@ const MON = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","
 const STORE_WORKERS = "presenze_divisione_workers_v3";
 const STORE_WEEK    = "presenze_divisione_week_v3";
 const STORE_DEPTS   = "presenze_divisione_depts_v1";
+const STORE_HOLIDAYS= "presenze_divisione_holidays_v1";
 
 /* ====== Stato ====== */
-let data = { workers:[], week:{} };
+let data = { workers:[], week:{}, holidays:{} };
+function isHoliday(iso){ return !!(data.holidays && data.holidays[iso]); }
+function toggleHoliday(iso){ if(!data.holidays) data.holidays={}; if(data.holidays[iso]) delete data.holidays[iso]; else data.holidays[iso]=true; saveHolidays(); render(); }
+/* Pasqua (algoritmo di Gauss) e festività italiane + patrono di Roma (San Pietro e Paolo, 29 giugno) */
+function easterDate(year){
+  const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+  return new Date(year,mo-1,da);
+}
+function romeHolidays(year){
+  const list=["01-01","01-06","04-25","05-01","06-02","06-29","08-15","11-01","12-08","12-25","12-26"].map(s=>year+"-"+s);
+  const e=easterDate(year), em=new Date(e); em.setDate(e.getDate()+1);
+  list.push(toISO(e), toISO(em));   // Pasqua e Lunedì dell'Angelo
+  return list;
+}
+function autoSetRomeHolidays(){
+  if(!data.holidays) data.holidays={};
+  const y0=new Date().getFullYear();
+  for(let y=y0-1;y<=y0+2;y++) for(const iso of romeHolidays(y)) data.holidays[iso]=true;
+  saveHolidays(); render();
+  ioMsg("Festivi (Italia + Roma) impostati per "+(y0-1)+"–"+(y0+2));
+}
 window.data = data;
 let anchorISO = toISO(new Date());   // un giorno qualsiasi della settimana mostrata
 let expandedKey = null;              // `${workerId}__${dateISO}`
@@ -435,6 +466,9 @@ function hoursFor(deptId,shiftId){
   return d.hours||"";
 }
 const G192_HOURS="6:30–14:40";
+/* Codici turno per orario (usati nel prospetto) */
+const TURNO_CODE = { "7:00-15:10":"G190", "12:20-20:30":"G191", "11:20-19:30":"G021", "6:30-14:40":"G192" };
+function turnoCode(hours){ return TURNO_CODE[String(hours||"").replace(/[–—-]/g,"-").replace(/\s+/g,"")] || ""; }
 /* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
 function effShift(worker,rec,date){
   if(isWeekend(date)) return rec.shift==="work" ? "work" : "home";   // default: a casa
@@ -479,6 +513,7 @@ function loadStore(key){ try{ const r=localStorage.getItem(key); return r ? JSON
 function saveWorkers(){ try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); }catch{} scheduleFileWrite(); cloudPushWorkers(); }
 function saveWeek(){ try{ localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{} scheduleFileWrite(); }
 function saveDepts(){ try{ localStorage.setItem(STORE_DEPTS, JSON.stringify(DEPTS)); }catch{} scheduleFileWrite(); cloudPushDepts(); }
+function saveHolidays(){ try{ localStorage.setItem(STORE_HOLIDAYS, JSON.stringify(data.holidays||{})); }catch{} scheduleFileWrite(); cloudPushHolidays(); }
 
 /* ====== Day record ====== */
 function ensureDay(weekKey,iso){
@@ -515,7 +550,7 @@ function normWorker(w){
   };
 }
 function buildPayload(){
-  return { version:3, exportedAt:new Date().toISOString(), depts:DEPTS, workers:data.workers.map(normWorker), week:data.week||{} };
+  return { version:3, exportedAt:new Date().toISOString(), depts:DEPTS, workers:data.workers.map(normWorker), week:data.week||{}, holidays:data.holidays||{} };
 }
 function exportJson(){
   downloadJson("presenze_data.json", buildPayload());
@@ -530,7 +565,8 @@ function importJsonText(text){
   data.workers = obj.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
   for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
   data.week = (obj.week && typeof obj.week==="object") ? obj.week : {};
-  saveWorkers(); saveWeek(); saveDepts(); if(cloudSeeded) cloudPushAll(); render();
+  data.holidays = (obj.holidays && typeof obj.holidays==="object") ? obj.holidays : {};
+  saveWorkers(); saveWeek(); saveDepts(); saveHolidays(); if(cloudSeeded) cloudPushAll(); render();
 }
 async function importJson(file){ importJsonText(await file.text()); ioMsg("dati caricati"); }
 
@@ -805,6 +841,7 @@ function downloadDailyPDF(){
   pdfTextC(cmd, PW/2, y, 15, true, "Divisione Editoria e Stampa"); y+=15;
   pdfTextC(cmd, PW/2, y, 10, true, "Area Produzione"); y+=20;
   pdfTextC(cmd, PW/2, y, 17, true, dateLabelIT(date));
+  if(isHoliday(iso)){ y+=13; pdfTextC(cmd, PW/2, y, 11, true, "— GIORNO FESTIVO —", RED); }
   const teamM=isMorningTeam("A",date)?"A":"B";
   pdfTextCol(cmd, PW-MR-22, 38, 26, true, teamM, BLUE);
   pdfTextC(cmd, PW-MR-9, 52, 6.5, false, "turno mattina");
@@ -1011,11 +1048,15 @@ function downloadWeeklyExcel(){
     let tuT="", tuS=11;
     if(!absent){
       if(isWeekend(d)){ tuT=sh==="work"?"Al lavoro":"A casa"; tuS=11; }
-      else if(isG192(w,rec)){ tuT="Turno G192 ("+G192_HOURS+")"; tuS=9; }
-      else if(isNoShift(w)){ tuT="Fisso ("+hoursFor(w.deptId,"morning")+")"; tuS=11; }
-      else if(sh==="morning"){ tuT="Mattina ("+hoursFor(w.deptId,"morning")+")"; tuS=9; }
-      else if(sh==="afternoon"){ tuT="Pomeriggio ("+hoursFor(w.deptId,"afternoon")+")"; tuS=10; }
-      else if(sh==="present"){ tuT="Al lavoro ("+(hoursFor(w.deptId,"present")||"8:00–16:20")+")"; tuS=11; }
+      else{
+        let hours=null, base="";
+        if(isG192(w,rec)){ hours=G192_HOURS; tuS=9; }
+        else if(isNoShift(w)){ hours=hoursFor(w.deptId,"morning"); base="Fisso"; tuS=11; }
+        else if(sh==="morning"){ hours=hoursFor(w.deptId,"morning"); tuS=9; }
+        else if(sh==="afternoon"){ hours=hoursFor(w.deptId,"afternoon"); tuS=10; }
+        else if(sh==="present"){ hours=hoursFor(w.deptId,"present")||"8:00–16:20"; base="Al lavoro"; tuS=11; }
+        if(hours){ const code=turnoCode(hours); tuT = code ? code+" ("+hours+")" : (base ? base+" ("+hours+")" : "("+hours+")"); }
+      }
     }
     const notes=[];
     const changed=!isNoShift(w)&&!isWeekend(d)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,d);
@@ -1027,9 +1068,9 @@ function downloadWeeklyExcel(){
 
   const grid=[], merges=[];
   grid.push([{t:"PROSPETTO SETTIMANALE — DIVISIONE — Settimana "+wkKey, s:2}]); merges.push("A1:"+lastCol+"1");
-  const hdr=[{t:"Nominativo", s:1}]; days.forEach(d=>hdr.push({t:dateLabelIT(d), s:1})); grid.push(hdr);
-  // raggruppa i reparti per area: prima tutta la Produzione, poi l'Amministrativa
-  const orderedDepts=[...DEPTS.filter(d=>d.section==="produzione"), ...DEPTS.filter(d=>d.section==="divisione")];
+  const hdr=[{t:"Nominativo", s:1}]; days.forEach(d=>{ const h=isHoliday(toISO(d)); hdr.push({t:dateLabelIT(d)+(h?"\nGIORNO FESTIVO":""), s:h?7:1}); }); grid.push(hdr);
+  // raggruppa i reparti per area: prima l'Amministrativa, poi la Produzione
+  const orderedDepts=[...DEPTS.filter(d=>d.section==="divisione"), ...DEPTS.filter(d=>d.section==="produzione")];
   let lastSec=null;
   for(const dpt of orderedDepts){
     const list=sortW(data.workers.filter(w=>w.deptId===dpt.id));
@@ -1055,7 +1096,7 @@ function downloadWeeklyExcel(){
       merges.push("A"+r0+":A"+(r0+2));
     }
   }
-  const cols=[{min:1,max:1,w:24}]; for(let i=2;i<=nCols;i++) cols.push({min:i,max:i,w:24});
+  const cols=[{min:1,max:1,w:26}]; for(let i=2;i<=nCols;i++) cols.push({min:i,max:i,w:30});
   downloadBlob(`Prospetto_divisione_${wkKey}.xlsx`, buildXlsx(grid,merges,cols), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   ioMsg("Excel settimanale scaricato");
 }
@@ -1104,10 +1145,11 @@ function onCloudValue(snap){
   const incoming={
     workers: val.workers ? (Array.isArray(val.workers)?val.workers:Object.values(val.workers)) : [],
     week:(val.week&&typeof val.week==="object")?val.week:{},
-    depts: val.depts ? (Array.isArray(val.depts)?val.depts:Object.values(val.depts)) : null
+    depts: val.depts ? (Array.isArray(val.depts)?val.depts:Object.values(val.depts)) : null,
+    holidays:(val.holidays&&typeof val.holidays==="object")?val.holidays:{}
   };
   const sameDepts = !incoming.depts || JSON.stringify(DEPTS)===JSON.stringify(incoming.depts.map(normDept));
-  if(sameDepts && JSON.stringify({w:data.workers.map(normWorker),k:data.week})===JSON.stringify({w:incoming.workers.map(normWorker),k:incoming.week})) return;
+  if(sameDepts && JSON.stringify({w:data.workers.map(normWorker),k:data.week,h:data.holidays||{}})===JSON.stringify({w:incoming.workers.map(normWorker),k:incoming.week,h:incoming.holidays})) return;
   if(expandedKey!==null){ pendingRemote=incoming; return; }   // non disturbare durante la modifica
   applyRemoteNow(incoming);
 }
@@ -1118,13 +1160,15 @@ function applyRemoteNow(incoming){
     data.workers=incoming.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
     for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
     data.week=incoming.week||{};
-    try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{}
+    data.holidays=incoming.holidays||{};
+    try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); localStorage.setItem(STORE_HOLIDAYS, JSON.stringify(data.holidays)); }catch{}
   } finally { applyingRemote=false; }
   render();
 }
-function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{}, depts:DEPTS }); }catch{} }
+function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{}, depts:DEPTS, holidays:data.holidays||{} }); }catch{} }
 function cloudPushWorkers(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("workers").set(data.workers.map(normWorker)); }catch{} }
 function cloudPushDepts(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("depts").set(DEPTS); }catch{} }
+function cloudPushHolidays(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("holidays").set(data.holidays||{}); }catch{} }
 function cloudPushWeek(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("week").set(data.week||{}); }catch{} }
 function cloudPushRecord(wk,iso,wid){
   if(!cloudRef||applyingRemote||!cloudSeeded) return;
@@ -1250,11 +1294,17 @@ function sortLeaderFirst(list){
 function buildDayColumn(date, todayISO){
   const iso=toISO(date), wk=getISOWeekKey(date);
   const weekend=isWeekend(date);
+  const hol=isHoliday(iso);
   const col=document.createElement("div");
-  col.className="day"+(iso===todayISO?" today":"")+(weekend?" weekend":"")+(isPastLocked(date)?" locked":"");
+  col.className="day"+(iso===todayISO?" today":"")+(weekend?" weekend":"")+(isPastLocked(date)?" locked":"")+(hol?" holiday":"");
 
   const head=document.createElement("div"); head.className="dayHead";
   head.innerHTML=`<div class="dow">${DOW[(date.getDay()+6)%7]}</div><div class="dnum">${date.getDate()} ${MON[date.getMonth()]}</div>`;
+  const fb=document.createElement("button"); fb.type="button"; fb.className="festBtn"+(hol?" on":"");
+  fb.textContent=hol?"🎄 Festivo":"Festivo";
+  fb.title=hol?"Giorno festivo: clic per togliere":"Segna come giorno festivo";
+  if(isPastLocked(date)){ fb.style.pointerEvents="none"; } else { fb.addEventListener("click",e=>{ e.stopPropagation(); toggleHoliday(iso); }); }
+  head.appendChild(fb);
   col.appendChild(head);
 
   // buckets per turno (feriale: mattina/pomeriggio/assenze · weekend: al lavoro/a casa · divisione: al lavoro/assenze)
@@ -1580,6 +1630,7 @@ function resetWeek(){
 function bootstrap(){
   const dp=loadStore(STORE_DEPTS);
   if(Array.isArray(dp) && dp.length){ setDepts(dp); } else { setDepts(DEFAULT_DEPTS); saveDepts(); }
+  const hol=loadStore(STORE_HOLIDAYS); if(hol && typeof hol==="object") data.holidays=hol;
   const w=loadStore(STORE_WORKERS);
   if(Array.isArray(w) && w.length){ data.workers=w.map(normWorker); }
   else{
@@ -1635,6 +1686,7 @@ function init(){
     $("ndName").addEventListener("keydown",e=>{ if(e.key==="Enter") addDeptFromForm(); });
     $("ndSection").addEventListener("change",updateDeptForm);
     $("ndShift").addEventListener("change",updateDeptForm);
+    $("holRome").addEventListener("click",autoSetRomeHolidays);
 
     // Cloud (Firebase): modale di configurazione
     const cm=$("cloudModal");
