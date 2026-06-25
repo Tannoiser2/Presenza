@@ -751,7 +751,7 @@ function hhStartMin(h){ const m=String(h).split(/[–-]/)[0].trim().match(/(\d{1
 function downloadDailyPDF(){
   const date=new Date();                 // PDF di OGGI — sempre AREA PRODUZIONE
   const iso=toISO(date), wk=getISOWeekKey(date);
-  const ORANGE=[0.99,0.75,0], BLUE=[0.36,0.61,0.84], GRAY=[0.62,0.62,0.62], GRAYCELL=[0.82,0.82,0.82], LINE=[0.55,0.55,0.55];
+  const ORANGE=[0.99,0.75,0], BLUE=[0.36,0.61,0.84], RED=[0.86,0.16,0.16], GRAY=[0.62,0.62,0.62], GRAYCELL=[0.82,0.82,0.82], LINE=[0.55,0.55,0.55];
   const inProd=w=>sectionOf(w.deptId)==="produzione";
   const recOf=w=>getRec(wk,iso,w.id);
   function orarioOf(w,rec){
@@ -761,12 +761,12 @@ function downloadDailyPDF(){
     if(isNoShift(w)) return hoursFor(w.deptId,"morning");
     return hoursFor(w.deptId, sh==="afternoon"?"afternoon":"morning");
   }
-  function fillOf(w,rec){           // colore casella: arancio=mattina, blu=pomeriggio, grigio=senza turno
-    const sh=effShift(w,rec,date);
+  function fillOf(w,rec){           // colore casella: grigio=senza turno, rosso=G192, arancio=inizio mattina, blu=inizio pomeriggio
     if(isAbsentStatus(rec.status||"PRESENTE")) return null;
     if(isNoShift(w)) return GRAYCELL;
-    if(sh==="morning") return ORANGE;
-    if(sh==="afternoon") return BLUE;
+    if(isG192(w,rec)) return RED;
+    const o=orarioOf(w,rec);
+    if(o) return hhStartMin(o) < 12*60 ? ORANGE : BLUE;   // inizia prima delle 12 = arancio, altrimenti blu
     return null;
   }
   const rankOfW=w=>(w.isChief?0:(w.isLeader?1:2));
@@ -1326,6 +1326,15 @@ function renderWeek(){
     wrap.appendChild(handle); wrap.appendChild(days);
     root.appendChild(wrap);
   }
+  fitBadgeStatuses();
+}
+/* stato accanto al nome: per intero se entra, altrimenti abbreviato */
+function fitBadgeStatuses(){
+  document.querySelectorAll("#week .badgeName").forEach(nm=>{
+    const ss=nm.querySelector(".badgeStatusInline"); if(!ss) return;
+    ss.textContent="  ·  "+(ss.dataset.full||"");
+    if(nm.scrollWidth > nm.clientWidth+1) ss.textContent="  ·  "+(ss.dataset.short||"");
+  });
 }
 
 function buildBadge(worker,rec,iso,curShift,date){
@@ -1357,11 +1366,14 @@ function buildBadge(worker,rec,iso,curShift,date){
   else if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; s.title="Leader"; head.appendChild(s); }
   const nm=document.createElement("span"); nm.className="badgeName";
   nm.appendChild(document.createTextNode(worker.name));
-  if(st!=="PRESENTE"){
+  // stato accanto al nome: stato vero, oppure "Delocalizzato" se è attivo il flag deloc
+  const dispSt = (st!=="PRESENTE") ? st : (rec.deloc ? "DELOCALIZZATO" : null);
+  if(dispSt){
     const ss=document.createElement("span"); ss.className="badgeStatusInline";
-    ss.textContent="  ·  "+statusShort(st);
+    ss.dataset.full=statusLabel(dispSt); ss.dataset.short=statusShort(dispSt);
+    ss.textContent="  ·  "+ss.dataset.short;   // default abbreviato; il fit-pass lo allunga se c'è spazio
     nm.appendChild(ss);
-    nm.title = worker.name + " — " + statusLabel(st);
+    nm.title = worker.name + " — " + statusLabel(dispSt);
   }
   head.appendChild(nm);
   // toggle Turno G192 (reparti abilitati) — mostrato PRIMA del delocalizzato
