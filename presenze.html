@@ -819,11 +819,16 @@ function downloadDailyPDF(){
   pdfRect(cmd, xNote, hT, wNote, hH, null, LINE); pdfTextC(cmd, xNote+wNote/2, hT+15, 8, true, "Note");
   y=hT+hH;
 
-  const rh=15, bh=13, wTot=(PW-MR)-ML;
+  const rh=15, bh=13, bhS=11, wTot=(PW-MR)-ML;
   function band(label){
     pdfRect(cmd, ML, y, wTot, bh, GRAY, LINE);
     pdfTextCol(cmd, ML+6, y+bh-3.5, 8, true, label.toUpperCase(), [1,1,1]);
     y+=bh;
+  }
+  function subBand(label){
+    pdfRect(cmd, ML, y, wTot, bhS, [0.86,0.86,0.86], LINE);
+    pdfTextCol(cmd, ML+18, y+bhS-3, 7, true, label, [0.1,0.1,0.1]);
+    y+=bhS;
   }
   function rowFor(w){
     const rec=recOf(w);
@@ -864,13 +869,26 @@ function downloadDailyPDF(){
   }
   const stop=()=>y>PH-60;
 
-  // raggruppa per Turno (Squadra) A sopra, B sotto; dentro ogni turno prima i Leader
-  for(const [tm,label] of [["A","Turno A"],["B","Turno B"]]){
-    const list=sortW(data.workers.filter(w=>inProd(w) && (w.baseTeam||"A")===tm));
-    if(!list.length) continue;
-    if(stop()) break;
-    band(label);
-    for(const w of list){ if(stop()){ pdfText(cmd, ML, y+10, 8, false, "(continua…)"); break; } rowFor(w); }
+  // raggruppa per REPARTO (Senza Turno, Prestampa, Stampa, Allestimento…);
+  // dentro ogni reparto a turni: prima Turno A poi Turno B; in ogni gruppo i Leader per primi
+  const cont=()=>{ pdfText(cmd, ML, y+10, 8, false, "(continua…)"); };
+  for(const d of DEPTS){
+    if(d.section!=="produzione") continue;
+    const members=data.workers.filter(w=>w.deptId===d.id);
+    if(!members.length) continue;
+    if(stop()){ cont(); break; }
+    band(d.name);
+    if(d.shifted){
+      for(const [tm,label] of [["A","Turno A"],["B","Turno B"]]){
+        const sub=sortW(members.filter(w=>(w.baseTeam||"A")===tm));
+        if(!sub.length) continue;
+        if(stop()){ cont(); break; }
+        subBand(label);
+        for(const w of sub){ if(stop()){ cont(); break; } rowFor(w); }
+      }
+    }else{
+      for(const w of sortW(members)){ if(stop()){ cont(); break; } rowFor(w); }
+    }
   }
 
   // firme
