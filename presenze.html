@@ -71,6 +71,7 @@
   .shift.dropok .shiftBody{ outline:2px dashed rgba(255,255,255,.5); outline-offset:-3px; border-radius:8px; }
 
   .deptGroup .deptName{ font-size:10px; font-weight:800; letter-spacing:.4px; color:var(--muted); text-transform:uppercase; margin:0 2px 4px; display:flex; align-items:center; gap:6px; }
+  .deptGroup .deptName .deptHours{ font-size:8.5px; font-weight:600; opacity:.85; }
   .deptGroup .deptName::before{ content:""; flex:1; height:1px; background:var(--line); }
   .deptGroup .deptName::after{ content:""; flex:1; height:1px; background:var(--line); }
   .deptBadges{ display:flex; flex-direction:column; gap:6px; }
@@ -1088,6 +1089,7 @@ function downloadWeeklyExcel(){
       const rowS=[{t:(w.isChief?"★ ":(w.isLeader?"• ":""))+w.name, s:4}];
       const rowT=[{t:"", s:4}], rowN=[{t:"", s:4}];
       for(const d of days){
+        if(isHoliday(toISO(d))){ rowS.push({t:"", s:7}); rowT.push({t:"", s:7}); rowN.push({t:"", s:7}); continue; }  // festivo: celle vuote rosso chiaro
         const rec=getRec(getISOWeekKey(d),toISO(d),w.id);
         const c=cellsFor(w,rec,d);
         rowS.push({t:c.stT, s:c.stS}); rowT.push({t:c.tuT, s:c.tuS}); rowN.push({t:c.noT, s:12});
@@ -1335,7 +1337,13 @@ function buildDayColumn(date, todayISO){
       for(const g of groups){
         const grp=document.createElement("div"); grp.className="deptGroup";
         const nm=document.createElement("div"); nm.className="deptName";
-        nm.textContent=g.hours ? (g.label+" · "+g.hours) : g.label;
+        const lab=document.createElement("span"); lab.className="deptLabel";
+        const code = g.hours ? turnoCode(g.hours) : "";
+        let main = g.label;
+        if(code && !g.label.includes(code)) main += " · " + code;
+        lab.appendChild(document.createTextNode(main));
+        if(g.hours){ const hp=document.createElement("span"); hp.className="deptHours"; hp.textContent=" ("+g.hours+")"; lab.appendChild(hp); }
+        nm.appendChild(lab);
         grp.appendChild(nm);
         const bb=document.createElement("div"); bb.className="deptBadges";
         for(const it of sortLeaderFirst(g.items)) bb.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
