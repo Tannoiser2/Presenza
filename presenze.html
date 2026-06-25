@@ -127,6 +127,8 @@
   .deptRow button{ padding:5px 10px; font-size:12px; flex:0 0 auto; }
   .addgrid{ display:grid; grid-template-columns:1.6fr 1fr .8fr .8fr auto; gap:8px; align-items:end; }
   @media (max-width: 760px){ .addgrid{ grid-template-columns:1fr; } }
+  .deptform{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; align-items:end; }
+  @media (max-width: 760px){ .deptform{ grid-template-columns:1fr; } }
   .field{ display:flex; flex-direction:column; gap:5px; }
   .field span{ font-size:11px; color:var(--muted); }
   .status{ padding:6px 16px; font-size:12px; color:var(--muted); }
@@ -217,9 +219,13 @@
   <div class="addbox">
     <div class="small" style="font-weight:800; margin-bottom:8px;">Reparti</div>
     <div id="deptList"></div>
-    <div class="addgrid" style="margin-top:10px">
+    <div class="deptform" style="margin-top:10px">
       <label class="field"><span>Nuovo reparto</span><input id="ndName" type="text" placeholder="Es. Magazzino" /></label>
       <label class="field"><span>Area</span><select id="ndSection"><option value="produzione">Area Produzione</option><option value="divisione">Area Amministrativa</option></select></label>
+      <label class="field" id="ndShiftWrap"><span>A turni (Squadra A/B)</span><select id="ndShift"><option value="0">No (orario fisso)</option><option value="1">Sì</option></select></label>
+      <label class="field" id="ndHoursMWrap"><span>Orario mattina</span><input id="ndHoursM" type="text" placeholder="7:00–15:10" /></label>
+      <label class="field" id="ndHoursAWrap"><span>Orario pomeriggio</span><input id="ndHoursA" type="text" placeholder="12:20–20:30" /></label>
+      <label class="field" id="ndHoursWrap"><span>Orario</span><input id="ndHours" type="text" placeholder="8:00–16:20" /></label>
       <label class="field"><span>Delocalizz. 🏠</span><select id="ndDeloc"><option value="1">Sì</option><option value="0">No</option></select></label>
       <label class="field"><span>Turno G192 ⏰</span><select id="ndG192"><option value="0">No</option><option value="1">Sì</option></select></label>
       <button id="ndAdd" class="primary">Aggiungi reparto</button>
@@ -273,8 +279,8 @@ window.HARD_WORKERS = [
 /* Reparti predefiniti. allowDeloc=mostra 🏠 · allowG192=mostra ⏰ · fixedMorning=orario fisso mattina */
 const DEFAULT_DEPTS = [
   { id:"N", name:"Area Senza Turno", section:"produzione", hours:"8:00–16:20", fixedMorning:true, allowDeloc:true, allowG192:false, builtin:true },
-  { id:"P", name:"Area Prestampa", section:"produzione", allowDeloc:true, allowG192:false, builtin:true },
-  { id:"S", name:"Reparto Stampa", section:"produzione", allowDeloc:true, allowG192:true, builtin:true },
+  { id:"P", name:"Area Prestampa", section:"produzione", shifted:true, hoursM:"7:00–15:10", hoursA:"12:20–20:30", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"S", name:"Reparto Stampa", section:"produzione", shifted:true, hoursM:"7:00–15:10", hoursA:"11:20–19:30", allowDeloc:true, allowG192:true, builtin:true },
   // Resto della Divisione: orario fisso 8:00–16:20, nessun turno
   { id:"AM", name:"Area Amministrativa",   section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
   { id:"TE", name:"Area Tecnica",          section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
@@ -287,7 +293,10 @@ function normDept(d){
     id:String(d.id||uuid()),
     name:normName(d.name||"")||"Reparto",
     section:(d.section==="divisione")?"divisione":"produzione",
-    hours:d.hours||"",
+    shifted:!!d.shifted,                 // a turni (Squadra A/B mattina/pomeriggio)
+    hours:d.hours||"",                   // orario fisso (reparti non a turni)
+    hoursM:d.hoursM||"",                 // orario mattina (reparti a turni)
+    hoursA:d.hoursA||"",                 // orario pomeriggio (reparti a turni)
     fixedMorning:!!d.fixedMorning,
     allowDeloc:d.allowDeloc!==false,
     allowG192:!!d.allowG192,
@@ -421,7 +430,9 @@ function hoursFor(deptId,shiftId){
   if(deptId==="N") return "8:00–16:20";
   if(deptId==="P") return shiftId==="afternoon" ? "12:20–20:30" : "7:00–15:10";
   if(deptId==="S") return shiftId==="afternoon" ? "11:20–19:30" : "7:00–15:10";
-  return deptById(deptId)?.hours || "";
+  const d=deptById(deptId); if(!d) return "";
+  if(d.shifted) return shiftId==="afternoon" ? (d.hoursA||"") : (d.hoursM||"");
+  return d.hours||"";
 }
 const G192_HOURS="6:30–14:40";
 /* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
@@ -985,8 +996,14 @@ function render(){
   // applica un aggiornamento remoto in coda quando la scheda è chiusa
   if(expandedKey===null && pendingRemote){ const r=pendingRemote; pendingRemote=null; applyRemoteNow(r); }
 }
+function deptHoursDesc(d){
+  if(d.fixedMorning) return "Fisso "+(d.hours || hoursFor(d.id,"morning") || "8:00–16:20");
+  if(d.shifted){ const m=hoursFor(d.id,"morning"), a=hoursFor(d.id,"afternoon"); return "A turni"+((m||a)?(" "+(m||"?")+" / "+(a||"?")):""); }
+  return "Fisso "+(d.hours||"8:00–16:20");
+}
 function renderEditorPanel(){
   fillAddMenus();
+  updateDeptForm();
   const dl=$("deptList"); if(!dl) return; dl.innerHTML="";
   for(const d of DEPTS){
     const row=document.createElement("div"); row.className="deptRow";
@@ -995,7 +1012,7 @@ function renderEditorPanel(){
     const meta=document.createElement("span"); meta.className="small muted";
     const caps=[]; if(d.allowDeloc!==false) caps.push("🏠"); if(d.allowG192) caps.push("⏰ G192");
     const secLab=d.section==="divisione" ? "Amministrativa" : "Produzione";
-    meta.textContent = "  "+secLab + (caps.length? "  ·  "+caps.join("  ") : "");
+    meta.textContent = "  "+secLab+"  ·  "+deptHoursDesc(d) + (caps.length? "  ·  "+caps.join("  ") : "");
     info.appendChild(b); info.appendChild(meta);
     const del=document.createElement("button"); del.type="button"; del.className="danger"; del.textContent="Elimina";
     del.addEventListener("click",()=>deleteDept(d.id));
@@ -1284,21 +1301,38 @@ function addWorker(){
   $("addName").value="";
   render();
 }
+/* mostra/nasconde i campi orario in base ad Area e "A turni" */
+function updateDeptForm(){
+  const sec=$("ndSection")?.value;
+  if(!sec) return;
+  const onShift = sec==="produzione" && $("ndShift").value==="1";
+  $("ndShiftWrap").style.display  = (sec==="produzione") ? "" : "none";
+  $("ndHoursMWrap").style.display = onShift ? "" : "none";
+  $("ndHoursAWrap").style.display = onShift ? "" : "none";
+  $("ndHoursWrap").style.display  = onShift ? "none" : "";
+}
 function addDeptFromForm(){
   const name=normName($("ndName").value);
   if(!name){ alert("Inserisci il nome del reparto."); return; }
   if(DEPTS.some(d=>d.name.toLowerCase()===name.toLowerCase())){ alert("Esiste già un reparto con questo nome."); return; }
+  const section=$("ndSection").value;
+  const onShift = section==="produzione" && $("ndShift").value==="1";
   const dep=normDept({
     id:uuid(),
     name,
-    section:$("ndSection").value,
+    section,
+    shifted:onShift,
+    fixedMorning: section==="produzione" && !onShift,
+    hoursM: onShift ? normName($("ndHoursM").value) : "",
+    hoursA: onShift ? normName($("ndHoursA").value) : "",
+    hours:  onShift ? "" : (normName($("ndHours").value) || (section==="divisione" ? "8:00–16:20" : "")),
     allowDeloc:$("ndDeloc").value==="1",
     allowG192:$("ndG192").value==="1",
     builtin:false
   });
   DEPTS.push(dep);
   saveDepts();
-  $("ndName").value="";
+  $("ndName").value=""; $("ndHoursM").value=""; $("ndHoursA").value=""; $("ndHours").value="";
   render();
 }
 function deleteDept(id){
@@ -1376,6 +1410,8 @@ function init(){
     $("addName").addEventListener("keydown",e=>{ if(e.key==="Enter") addWorker(); });
     $("ndAdd").addEventListener("click",addDeptFromForm);
     $("ndName").addEventListener("keydown",e=>{ if(e.key==="Enter") addDeptFromForm(); });
+    $("ndSection").addEventListener("change",updateDeptForm);
+    $("ndShift").addEventListener("change",updateDeptForm);
 
     // Cloud (Firebase): modale di configurazione
     const cm=$("cloudModal");
