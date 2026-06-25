@@ -1027,8 +1027,10 @@ function downloadWeeklyExcel(){
   const grid=[], merges=[];
   grid.push([{t:"PROSPETTO SETTIMANALE — DIVISIONE — Settimana "+wkKey, s:2}]); merges.push("A1:"+lastCol+"1");
   const hdr=[{t:"Nominativo", s:1}]; days.forEach(d=>hdr.push({t:dateLabelIT(d), s:1})); grid.push(hdr);
+  // raggruppa i reparti per area: prima tutta la Produzione, poi l'Amministrativa
+  const orderedDepts=[...DEPTS.filter(d=>d.section==="produzione"), ...DEPTS.filter(d=>d.section==="divisione")];
   let lastSec=null;
-  for(const dpt of DEPTS){
+  for(const dpt of orderedDepts){
     const list=sortW(data.workers.filter(w=>w.deptId===dpt.id));
     if(!list.length) continue;
     if(dpt.section!==lastSec){   // separatore d'area
