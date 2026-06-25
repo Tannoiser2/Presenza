@@ -771,14 +771,29 @@ function downloadDailyPDF(){
   }
   const rankOfW=w=>(w.isChief?0:(w.isLeader?1:2));
   const sortW=ws=>ws.slice().sort((a,b)=>(rankOfW(a)-rankOfW(b))||a.name.localeCompare(b.name));
+  const hKey=h=>String(h).replace(/[–—-]/g,"-").replace(/\s+/g,"").trim();   // chiave per unificare orari uguali
+  function wrapText(text,maxW,size){
+    const words=String(text).split(/\s+/).filter(Boolean);
+    const maxCh=Math.max(5,Math.floor(maxW/(size*0.5)));
+    const lines=[]; let cur="";
+    for(const wd of words){
+      const t=cur?cur+" "+wd:wd;
+      if(t.length<=maxCh){ cur=t; continue; }
+      if(cur){ lines.push(cur); cur=""; }
+      if(wd.length>maxCh){ let s=wd; while(s.length>maxCh){ lines.push(s.slice(0,maxCh)); s=s.slice(maxCh); } cur=s; }
+      else cur=wd;
+    }
+    if(cur) lines.push(cur);
+    return lines;
+  }
 
-  // colonne orari distinte (ordinate per ora d'inizio)
+  // colonne orari distinte (unificate per orario uguale, ordinate per ora d'inizio)
   const orariMap=new Map();
-  for(const w of data.workers){ if(!inProd(w)) continue; const o=orarioOf(w,recOf(w)); if(o) orariMap.set(o,hhStartMin(o)); }
-  const cols=[...orariMap.keys()].sort((a,b)=>orariMap.get(a)-orariMap.get(b));
+  for(const w of data.workers){ if(!inProd(w)) continue; const o=orarioOf(w,recOf(w)); if(o){ const k=hKey(o); if(!orariMap.has(k)) orariMap.set(k,{disp:o,start:hhStartMin(o)}); } }
+  const cols=[...orariMap.values()].sort((a,b)=>a.start-b.start).map(v=>v.disp);
 
-  const PW=595.28, PH=841.89, ML=26, MR=26, minNote=92;
-  let wName=150, wTime=24, wAss=22, wVar=86;
+  const PW=595.28, PH=841.89, ML=26, MR=26, minNote=110;
+  let wName=148, wTime=24, wAss=22, wVar=80;
   const availT=(PW-MR)-ML-wName-wAss-wVar-minNote;
   if(cols.length>0 && cols.length*wTime>availT) wTime=Math.max(13, availT/cols.length);
   const xName=ML, xTime=xName+wName, xAss=xTime+cols.length*wTime, xVar=xAss+wAss, xNote=xVar+wVar;
@@ -816,45 +831,45 @@ function downloadDailyPDF(){
     const absent=isAbsentStatus(rec.status||"PRESENTE");
     const st=rec.status||"PRESENTE";
     const fill=fillOf(w,rec);
-    const top=y;
-    // nome
-    pdfRect(cmd, xName, top, wName, rh, fill, LINE);
-    let nm=w.name+(w.isChief?" (C.O.)":"");
-    pdfTextCol(cmd, xName+4, top+rh-4.5, 8.5, (w.isChief||w.isLeader), nm, null);
-    // orari
-    const o=orarioOf(w,rec);
-    cols.forEach((h,i)=>{ const cx=xTime+i*wTime; const f=(!absent && o===h)?(fill||ORANGE):null; pdfRect(cmd,cx,top,wTime,rh,f,LINE); });
-    // Ass.
-    pdfRect(cmd, xAss, top, wAss, rh, null, LINE);
-    if(absent) pdfTextC(cmd, xAss+wAss/2, top+rh-4.5, 9, true, "X");
-    // Variazione Turno
-    pdfRect(cmd, xVar, top, wVar, rh, null, LINE);
-    let vt="";
-    if(absent) vt="Assente";
-    else if(!isNoShift(w)&&!isWeekend(date)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,date)) vt="cambio turno";
-    if(vt) pdfTextC(cmd, xVar+wVar/2, top+rh-4.5, 8, false, vt);
-    // Note
-    pdfRect(cmd, xNote, top, wNote, rh, null, LINE);
+    // note (a capo nella larghezza colonna)
     const notes=[];
     if(!absent && (rec.deloc||st==="DELOCALIZZATO")) notes.push("DELOCALIZZATO");
     if(st==="TELELAVORO") notes.push("TELELAVORO");
     if(absent) notes.push(statusLabel(st).toUpperCase());
     else if(st!=="PRESENTE"&&st!=="DELOCALIZZATO"&&st!=="TELELAVORO") notes.push(statusLabel(st));
     if((rec.note||"").trim()) notes.push(rec.note.trim());
-    if(notes.length) pdfTextC(cmd, xNote+wNote/2, top+rh-4.5, 7.3, false, notes.join(" · "));
-    y+=rh;
+    const noteLines = notes.length ? wrapText(notes.join(" · "), wNote-6, 7.3) : [];
+    const lineH=8;
+    const rowH=Math.max(rh, 6 + Math.max(1,noteLines.length)*lineH);
+    const top=y, midBase=top+rowH/2+3;
+    // nome
+    pdfRect(cmd, xName, top, wName, rowH, fill, LINE);
+    pdfTextCol(cmd, xName+4, midBase, 8.5, (w.isChief||w.isLeader), w.name+(w.isChief?" (C.O.)":""), null);
+    // orari (cella evidenziata sul turno della persona)
+    const ok=orarioOf(w,rec); const okk=ok?hKey(ok):null;
+    cols.forEach((h,i)=>{ const cx=xTime+i*wTime; const f=(!absent && okk===hKey(h))?(fill||ORANGE):null; pdfRect(cmd,cx,top,wTime,rowH,f,LINE); });
+    // Ass. → casella nera se assente
+    pdfRect(cmd, xAss, top, wAss, rowH, null, LINE);
+    if(absent){ const side=Math.min(wAss-8,12), cx=xAss+wAss/2, cy=top+rowH/2; pdfRect(cmd, cx-side/2, cy-side/2, side, side, [0,0,0], null); }
+    // Variazione Turno
+    pdfRect(cmd, xVar, top, wVar, rowH, null, LINE);
+    let vt="";
+    if(absent) vt="Assente";
+    else if(!isNoShift(w)&&!isWeekend(date)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,date)) vt="cambio turno";
+    if(vt) pdfTextC(cmd, xVar+wVar/2, midBase, 8, false, vt);
+    // Note (multilinea, centrate verticalmente)
+    pdfRect(cmd, xNote, top, wNote, rowH, null, LINE);
+    if(noteLines.length){ const startB=top+(rowH-noteLines.length*lineH)/2+lineH-1.5; noteLines.forEach((ln,i)=>pdfTextC(cmd, xNote+wNote/2, startB+i*lineH, 7.3, false, ln)); }
+    y+=rowH;
   }
   const stop=()=>y>PH-60;
 
-  // Capo Officina, poi i reparti di produzione (in ordine), saltando il capo
-  const chiefs=sortW(data.workers.filter(w=>inProd(w)&&w.isChief));
-  if(chiefs.length && !stop()){ band("Capo Officina"); for(const w of chiefs){ if(stop()) break; rowFor(w); } }
-  for(const d of DEPTS){
-    if(d.section!=="produzione") continue;
-    const list=sortW(data.workers.filter(w=>w.deptId===d.id && !w.isChief));
+  // raggruppa per Turno (Squadra) A sopra, B sotto; dentro ogni turno prima i Leader
+  for(const [tm,label] of [["A","Turno A"],["B","Turno B"]]){
+    const list=sortW(data.workers.filter(w=>inProd(w) && (w.baseTeam||"A")===tm));
     if(!list.length) continue;
     if(stop()) break;
-    band(d.name);
+    band(label);
     for(const w of list){ if(stop()){ pdfText(cmd, ML, y+10, 8, false, "(continua…)"); break; } rowFor(w); }
   }
 
@@ -958,10 +973,8 @@ function buildXlsx(grid, merges, cols){
   return zipStore(files);
 }
 function downloadWeeklyExcel(){
-  if(activeSection==="editor"){ ioMsg("Apri una scheda (Produzione o Amministrativa) per scaricare l'Excel."); return; }
-  const days=weekDates(fromISO(anchorISO)).filter(d=>!isWeekend(d));   // esclude Sab/Dom
+  const days=weekDates(fromISO(anchorISO)).filter(d=>!isWeekend(d));   // esclude Sab/Dom · TUTTA LA DIVISIONE
   const wkKey=getISOWeekKey(fromISO(anchorISO));
-  const secLabel=(SECTIONS.find(s=>s.id===activeSection)?.label)||"";
   const rankW=w=>(w.isChief?0:(w.isLeader?1:2));
   const sortW=ws=>ws.slice().sort((a,b)=>(rankW(a)-rankW(b))||a.name.localeCompare(b.name));
   const nCols=1+days.length, lastCol=colLetter(nCols);
@@ -994,12 +1007,18 @@ function downloadWeeklyExcel(){
   }
 
   const grid=[], merges=[];
-  grid.push([{t:"PROSPETTO SETTIMANALE — "+secLabel+" — Settimana "+wkKey, s:2}]); merges.push("A1:"+lastCol+"1");
+  grid.push([{t:"PROSPETTO SETTIMANALE — DIVISIONE — Settimana "+wkKey, s:2}]); merges.push("A1:"+lastCol+"1");
   const hdr=[{t:"Nominativo", s:1}]; days.forEach(d=>hdr.push({t:dateLabelIT(d), s:1})); grid.push(hdr);
+  let lastSec=null;
   for(const dpt of DEPTS){
-    if(dpt.section!==activeSection) continue;
     const list=sortW(data.workers.filter(w=>w.deptId===dpt.id));
     if(!list.length) continue;
+    if(dpt.section!==lastSec){   // separatore d'area
+      lastSec=dpt.section;
+      const ar=grid.length+1; const arName=(dpt.section==="divisione"?"AREA AMMINISTRATIVA":"AREA PRODUZIONE");
+      const arCells=[{t:arName, s:2}]; for(let i=1;i<nCols;i++) arCells.push({t:"", s:2}); grid.push(arCells);
+      merges.push("A"+ar+":"+lastCol+ar);
+    }
     const br=grid.length+1; const bandCells=[{t:dpt.name, s:3}]; for(let i=1;i<nCols;i++) bandCells.push({t:"", s:3}); grid.push(bandCells);
     merges.push("A"+br+":"+lastCol+br);
     for(const w of list){
@@ -1016,7 +1035,7 @@ function downloadWeeklyExcel(){
     }
   }
   const cols=[{min:1,max:1,w:24}]; for(let i=2;i<=nCols;i++) cols.push({min:i,max:i,w:24});
-  downloadBlob(`Prospetto_${activeSection}_${wkKey}.xlsx`, buildXlsx(grid,merges,cols), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  downloadBlob(`Prospetto_divisione_${wkKey}.xlsx`, buildXlsx(grid,merges,cols), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   ioMsg("Excel settimanale scaricato");
 }
 
