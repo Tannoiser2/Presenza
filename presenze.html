@@ -788,7 +788,8 @@ function hhStartMin(h){ const m=String(h).split(/[–-]/)[0].trim().match(/(\d{1
 function downloadDailyPDF(){
   const date=new Date();                 // PDF di OGGI — sempre AREA PRODUZIONE
   const iso=toISO(date), wk=getISOWeekKey(date);
-  const ORANGE=[0.99,0.75,0], BLUE=[0.36,0.61,0.84], RED=[0.86,0.16,0.16], GRAY=[0.62,0.62,0.62], GRAYCELL=[0.82,0.82,0.82], LINE=[0.55,0.55,0.55];
+  const ORANGE=[0.99,0.65,0.08], BLUE=[0.36,0.61,0.84], RED=[0.86,0.16,0.16], YELLOW=[1,0.92,0.32], GRAY=[0.62,0.62,0.62], GRAYCELL=[0.82,0.82,0.82], LINE=[0.55,0.55,0.55];
+  const TURNO_FILL={ "7:00-15:10":BLUE, "11:20-19:30":ORANGE, "12:20-20:30":YELLOW, "6:30-14:40":RED };  // colore casella per orario
   const inProd=w=>sectionOf(w.deptId)==="produzione";
   const recOf=w=>getRec(wk,iso,w.id);
   function orarioOf(w,rec){
@@ -798,12 +799,11 @@ function downloadDailyPDF(){
     if(isNoShift(w)) return hoursFor(w.deptId,"morning");
     return hoursFor(w.deptId, sh==="afternoon"?"afternoon":"morning");
   }
-  function fillOf(w,rec){           // colore casella: grigio=senza turno, rosso=G192, arancio=inizio mattina, blu=inizio pomeriggio
+  function fillOf(w,rec){           // colore casella per orario (vedi TURNO_FILL); grigio=senza turno
     if(isAbsentStatus(rec.status||"PRESENTE")) return null;
     if(isNoShift(w)) return GRAYCELL;
-    if(isG192(w,rec)) return RED;
     const o=orarioOf(w,rec);
-    if(o) return hhStartMin(o) < 12*60 ? ORANGE : BLUE;   // inizia prima delle 12 = arancio, altrimenti blu
+    if(o){ const k=String(o).replace(/[–—-]/g,"-").replace(/\s+/g,""); return TURNO_FILL[k] || (hhStartMin(o)<12*60?ORANGE:BLUE); }
     return null;
   }
   const rankOfW=w=>(w.isChief?0:(w.isLeader?1:2));
