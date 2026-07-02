@@ -1197,7 +1197,7 @@ function moveWorker(wid,iso,shift){
   const worker=data.workers.find(w=>w.id===wid);
   const date=fromISO(iso);
   if(isPastLocked(date)) return; // versione colleghi: giornate passate in sola lettura
-  if(isNoShift(worker) && !isWeekend(date)) return; // Area Senza Turno: fisso solo nei feriali
+  if(isNoShift(worker) && !isWeekend(date) && shift==="afternoon") return; // Senza Turno: può andare in Assenze o restare al mattino, mai al pomeriggio
   const wk=getISOWeekKey(date);
   const rec=getRec(wk,iso,wid);
   const patch={ shift };
@@ -1408,8 +1408,8 @@ function buildBadge(worker,rec,iso,curShift,date){
   const locked=isPastLocked(date);   // versione colleghi: giornata passata in sola lettura
 
   const el=document.createElement("div");
-  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(fixed?" nodrag":"")+(open?" open":"")+(isDel?" isDeloc":"")+(locked?" locked":"");
-  el.draggable=!fixed && !locked;
+  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(open?" open":"")+(isDel?" isDeloc":"")+(locked?" locked":"");
+  el.draggable=!locked;   // trascinabile (i senza turno solo verso Assenze/mattino: il blocco è in moveWorker)
   el.dataset.id=worker.id;
 
   // sfondo del box = colore del turno (40%, oppure 20% se delocalizzato); rosso 40%/20% se cambio turno
@@ -1548,6 +1548,8 @@ function setupDnD(){
   root.addEventListener("dragover",e=>{
     const z=e.target.closest(".shift"); if(!z) return;
     if(z.closest(".day.locked")) return;   // versione colleghi: giornata passata bloccata
+    const dw=dragId?data.workers.find(x=>x.id===dragId):null;
+    if(dw && isNoShift(dw) && z.dataset.shift==="afternoon" && !isWeekend(fromISO(z.dataset.date))) return; // senza turno: no pomeriggio
     e.preventDefault(); e.dataTransfer.dropEffect="move";
     root.querySelectorAll(".shift.dropok").forEach(c=>{ if(c!==z) c.classList.remove("dropok"); });
     z.classList.add("dropok");
