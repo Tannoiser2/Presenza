@@ -32,6 +32,12 @@
   .tabs button{ font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px 10px 0 0; background:var(--panel2); border:1px solid var(--line); border-bottom:none; color:var(--muted); position:relative; top:1px; }
   .tabs button:hover{ color:var(--text); }
   .tabs button.active{ color:var(--text); background:var(--panel); border-color:#30445f; }
+  /* sotto-linguette: filtri per reparto/area */
+  .subtabs{ display:flex; gap:6px; flex-wrap:wrap; padding:8px 16px 0; }
+  .subtabs button{ font-size:11px; font-weight:700; padding:4px 11px; border-radius:999px; background:var(--panel2); border:1px solid var(--line); color:var(--muted); }
+  .subtabs button:hover{ color:var(--text); }
+  .subtabs button.active{ color:#fff; background:rgba(31,111,235,.35); border-color:rgba(31,111,235,.7); }
+  .subtabs button.reset{ color:#f6dca0; border-style:dashed; }
 
   /* ===== Week strip (tutti i giorni) ===== */
   .week{ display:flex; gap:10px; overflow-x:auto; padding:12px 16px 26px; align-items:flex-start; }
@@ -104,6 +110,7 @@
   .chip{ font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
   .chip.crown{ border:none; padding:0; font-size:12px; }
   .chip.deloc{ border:none; padding:0; font-size:12px; }
+  .chip.changeChip{ border:none; padding:0; font-size:12px; }
   .chip.star{ color:#e6edf3; border:none; padding:0; font-size:11px; }
   /* toggle delocalizzato sul badge */
   .delBtn,.g192Btn{ border:none; background:transparent; cursor:pointer; padding:0 1px; font-size:13px; line-height:1; opacity:.25; filter:grayscale(1); }
@@ -187,6 +194,7 @@
 </header>
 
 <div class="tabs" id="tabs"></div>
+<div class="subtabs" id="subtabs"></div>
 
 <div id="cloudBanner" class="filebanner"></div>
 <div id="fileBanner" class="filebanner"></div>
@@ -411,6 +419,7 @@ function setWeekendCollapsed(v){ weekendCollapsed=!!v; try{ localStorage.setItem
 let activeSection = "produzione";    // scheda attiva: "produzione" | "divisione"
 try{ const s=localStorage.getItem("presenze_section"); if(s==="produzione"||s==="divisione") activeSection=s; }catch{}
 function setSection(s){ if(s!==activeSection){ activeSection=s; try{ localStorage.setItem("presenze_section",s); }catch{} expandedKey=null; fillAddMenus(); render(); } }
+const deptFilters = { produzione:new Set(), divisione:new Set() };   // filtri reparto/area per scheda (solo vista)
 
 /* ====== Util ====== */
 const $ = id => document.getElementById(id);
@@ -1236,9 +1245,25 @@ function renderTabs(){
     : activeSection==="divisione"? "Area Amministrativa (orario fisso 8:00–16:20). Trascina i badge tra Al lavoro e Assenze. Salvataggio automatico."
     :                              "Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.";
 }
+function renderSubTabs(){
+  const st=$("subtabs"); if(!st) return; st.innerHTML="";
+  if(activeSection!=="produzione" && activeSection!=="divisione"){ st.style.display="none"; return; }
+  const depts=DEPTS.filter(d=>d.section===activeSection);
+  if(depts.length<=1){ st.style.display="none"; return; }   // niente filtri se c'è un solo reparto
+  st.style.display="";
+  const filt=deptFilters[activeSection];
+  for(const d of depts){
+    const b=document.createElement("button"); b.type="button"; b.className="subtab"+(filt.has(d.id)?" active":"");
+    b.textContent=d.name;
+    b.addEventListener("click",()=>{ if(filt.has(d.id)) filt.delete(d.id); else filt.add(d.id); render(); });
+    st.appendChild(b);
+  }
+  if(filt.size){ const r=document.createElement("button"); r.type="button"; r.className="subtab reset"; r.textContent="✕ Mostra tutti"; r.addEventListener("click",()=>{ filt.clear(); render(); }); st.appendChild(r); }
+}
 function render(){
   if(isEmbed && activeSection==="editor") activeSection="produzione";
   renderTabs();
+  renderSubTabs();
   renderWeekLabel();
   if(activeSection==="editor"){
     $("week").style.display="none";
@@ -1311,9 +1336,11 @@ function buildDayColumn(date, todayISO){
 
   // buckets per turno (feriale: mattina/pomeriggio/assenze · weekend: al lavoro/a casa · divisione: al lavoro/assenze)
   const shifts=shiftsFor(date);
+  const filt=deptFilters[activeSection];
   const buckets={}; for(const s of shifts) buckets[s.id]=[];
   for(const w of data.workers){
     if(sectionOf(w.deptId)!==activeSection) continue;   // mostra solo gli operatori della scheda attiva
+    if(filt && filt.size && !filt.has(w.deptId)) continue;   // filtro reparto/area attivo
     const rec=getRec(wk,iso,w.id);
     const sh=effShift(w,rec,date);
     (buckets[sh]||buckets[shifts[shifts.length-1].id]).push({ worker:w, rec });
@@ -1434,6 +1461,8 @@ function buildBadge(worker,rec,iso,curShift,date){
     nm.title = worker.name + " — " + statusLabel(dispSt);
   }
   head.appendChild(nm);
+  // icona "cambio turno" accanto alle icone (vicino alla casetta)
+  if(isChanged){ const c=document.createElement("span"); c.className="chip changeChip"; c.textContent="🔄"; c.title="Cambio turno"; head.appendChild(c); }
   // toggle Turno G192 (reparti abilitati) — mostrato PRIMA del delocalizzato
   if(deptAllowsG192(worker) && !isWeekend(date)){
     const gBtn=document.createElement("button");
