@@ -311,7 +311,7 @@ const DEFAULT_DEPTS = [
   { id:"AM", name:"Area Amministrativa",   section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
   { id:"TE", name:"Area Tecnica",          section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
   { id:"GR", name:"Progettazione Grafica", section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
-  { id:"SP", name:"Spedizioni",            section:"divisione", hours:"9:50–18:00", allowDeloc:true, allowG192:false, defaultTurno:"G032", builtin:true },
+  { id:"SP", name:"Spedizioni",            section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
 ];
 let DEPTS = DEFAULT_DEPTS.map(d=>({...d}));
 function normDept(d){
@@ -326,9 +326,7 @@ function normDept(d){
     fixedMorning:!!d.fixedMorning,
     allowDeloc:d.allowDeloc!==false,
     allowG192:!!d.allowG192,
-    defaultTurno:(d.defaultTurno===undefined)   // migrazione: dati vecchi ereditano il predefinito del reparto builtin (es. Spedizioni→G032)
-      ? ((DEFAULT_DEPTS.find(x=>x.id===d.id)||{}).defaultTurno || "")
-      : (turnoByCode(d.defaultTurno)?d.defaultTurno:""),
+    defaultTurno:(turnoByCode(d.defaultTurno)?d.defaultTurno:""),   // turno predefinito del reparto/area (impostabile nell'Editor)
     builtin:!!d.builtin
   };
 }
@@ -380,8 +378,10 @@ const SHIFTS_WE = [
 ];
 /* Resto Divisione (feriale): nessun turno, solo presenza/assenza */
 const SHIFTS_DIV = [
-  { id:"present", label:"Al lavoro (8:00–16:20)", split:false, group:"div" },
-  { id:"absent",  label:"Assenze", split:false },
+  { id:"morning",   label:"Mattina",    split:false, group:"div", optional:true },   // solo se qualcuno ha un turno di mattina
+  { id:"present",   label:"Al lavoro (8:00–16:20)", split:false, group:"div" },
+  { id:"afternoon", label:"Pomeriggio", split:false, group:"div", optional:true },   // es. chi ha il turno G032
+  { id:"absent",    label:"Assenze", split:false },
 ];
 function isWeekend(date){ const d=date.getDay(); return d===0 || d===6; }
 function shiftsFor(date, section){
@@ -520,7 +520,11 @@ function effTurnoOverride(worker,rec){
 function effShift(worker,rec,date){
   if(isWeekend(date)) return rec.shift==="work" ? "work" : "home";   // default: a casa
   const absent=isAbsentStatus(rec.status||"PRESENTE");
-  if(sectionOf(worker.deptId)==="divisione") return absent ? "absent" : "present";  // area amministrativa: presenza/assenza
+  if(sectionOf(worker.deptId)==="divisione"){
+    if(absent) return "absent";
+    const ovd=effTurnoOverride(worker,rec);
+    return ovd ? turnoByCode(ovd).slot : "present";                 // area amministrativa: presenza, o turno (mattina/pomeriggio) se attivato
+  }
   if(absent) return "absent";
   const ov=effTurnoOverride(worker,rec);
   if(ov) return turnoByCode(ov).slot;                               // turno forzato/G192/predefinito → sua fascia
@@ -1402,6 +1406,7 @@ function buildDayColumn(date, todayISO){
 
   const body=document.createElement("div"); body.className="dayBody";
   for(const sh of shifts){
+    if(sh.optional && !buckets[sh.id].length) continue;   // Mattina/Pomeriggio in Amministrativa: solo se qualcuno ha un turno lì
     const block=document.createElement("div"); block.className="shift "+sh.id;
     block.dataset.shift=sh.id; block.dataset.date=iso;
 
@@ -1730,6 +1735,8 @@ function resetWeek(){
 function bootstrap(){
   const dp=loadStore(STORE_DEPTS);
   if(Array.isArray(dp) && dp.length){ setDepts(dp); } else { setDepts(DEFAULT_DEPTS); saveDepts(); }
+  // correzione una tantum: Spedizioni non ha turno predefinito (il G032 si attiva per persona)
+  try{ if(!localStorage.getItem("presenze_mig_sp_turno")){ const sp=deptById("SP"); if(sp && sp.defaultTurno==="G032"){ sp.defaultTurno=""; saveDepts(); } localStorage.setItem("presenze_mig_sp_turno","1"); } }catch{}
   const hol=loadStore(STORE_HOLIDAYS); if(hol && typeof hol==="object") data.holidays=hol;
   const cf=loadStore(STORE_CONFIRMS); if(cf && typeof cf==="object") data.confirms=cf;
   const w=loadStore(STORE_WORKERS);
