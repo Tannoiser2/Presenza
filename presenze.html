@@ -505,6 +505,15 @@ const TURNI = [
   { code:"G191", hours:"12:20–20:30", slot:"afternoon" },
 ];
 function turnoByCode(c){ return TURNI.find(t=>t.code===c); }
+/* Popola un <select> di turni: automatico, poi gruppo Mattina, poi gruppo Pomeriggio */
+function fillTurnoSelect(sel,current,autoLabel){
+  sel.innerHTML="";
+  const oa=document.createElement("option"); oa.value=""; oa.textContent=autoLabel; sel.appendChild(oa);
+  const gm=document.createElement("optgroup"); gm.label="── Mattina ──";
+  const ga=document.createElement("optgroup"); ga.label="── Pomeriggio ──";
+  for(const t of TURNI){ const o=document.createElement("option"); o.value=t.code; o.textContent=t.code+" ("+t.hours+")"; if((current||"")===t.code) o.selected=true; (t.slot==="morning"?gm:ga).appendChild(o); }
+  sel.appendChild(gm); sel.appendChild(ga);
+}
 /* Codici turno per orario (usati nel prospetto) */
 const TURNO_CODE = { "7:00-15:10":"G190", "12:20-20:30":"G191", "11:20-19:30":"G021", "6:30-14:40":"G192", "9:50-18:00":"G032" };
 function turnoCode(hours){ return TURNO_CODE[String(hours||"").replace(/[–—-]/g,"-").replace(/\s+/g,"")] || ""; }
@@ -1351,8 +1360,7 @@ function renderEditorPanel(){
     info.appendChild(b); info.appendChild(meta);
     // turno predefinito del reparto/area (es. Spedizioni → G032)
     const ts=document.createElement("select"); ts.className="deptTurnoSel"; ts.title="Turno predefinito del reparto/area";
-    const oa=document.createElement("option"); oa.value=""; oa.textContent="Turno predef.: —"; ts.appendChild(oa);
-    for(const t of TURNI){ const o=document.createElement("option"); o.value=t.code; o.textContent=t.code+" ("+t.hours+")"; if((d.defaultTurno||"")===t.code) o.selected=true; ts.appendChild(o); }
+    fillTurnoSelect(ts, d.defaultTurno, "Turno predef.: —");
     ts.addEventListener("change",()=>{ const dd=deptById(d.id); if(dd){ dd.defaultTurno=ts.value; saveDepts(); render(); } });
     const del=document.createElement("button"); del.type="button"; del.className="danger"; del.textContent="Elimina";
     del.addEventListener("click",()=>deleteDept(d.id));
@@ -1581,8 +1589,7 @@ function buildEditor(worker,rec,iso,curShift){
 
   // turno forzato (assegna a questa persona un turno anche se non compete al reparto/area)
   const tsel=document.createElement("select");
-  const oa=document.createElement("option"); oa.value=""; oa.textContent="Turno: automatico"; tsel.appendChild(oa);
-  for(const t of TURNI){ const o=document.createElement("option"); o.value=t.code; o.textContent="Turno "+t.code+" ("+t.hours+")"; if((rec.turno||"")===t.code) o.selected=true; tsel.appendChild(o); }
+  fillTurnoSelect(tsel, rec.turno, "Turno: automatico");
   tsel.addEventListener("change",()=>{ setRec(wk,iso,worker.id,{turno:tsel.value}); render(); });
   ed.appendChild(tsel);
 
