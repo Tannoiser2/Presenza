@@ -32,12 +32,18 @@
   .tabs button{ font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px 10px 0 0; background:var(--panel2); border:1px solid var(--line); border-bottom:none; color:var(--muted); position:relative; top:1px; }
   .tabs button:hover{ color:var(--text); }
   .tabs button.active{ color:var(--text); background:var(--panel); border-color:#30445f; }
-  /* sotto-linguette: filtri per reparto/area */
-  .subtabs{ display:flex; gap:6px; flex-wrap:wrap; padding:8px 16px 0; }
-  .subtabs button{ font-size:11px; font-weight:700; padding:4px 11px; border-radius:999px; background:var(--panel2); border:1px solid var(--line); color:var(--muted); }
-  .subtabs button:hover{ color:var(--text); }
-  .subtabs button.active{ color:#fff; background:rgba(31,111,235,.35); border-color:rgba(31,111,235,.7); }
-  .subtabs button.reset{ color:#f6dca0; border-style:dashed; }
+  /* sotto-linguette: filtri per reparto/area + conferma presenze */
+  .subtabs{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:8px 16px 0; }
+  .subtabs .subtab-wrap{ display:inline-flex; align-items:stretch; border:1px solid var(--line); border-radius:999px; background:var(--panel2); overflow:hidden; }
+  .subtabs .subtab-wrap.active{ border-color:rgba(31,111,235,.7); }
+  .subtabs .subtab-name{ font-size:11px; font-weight:700; padding:5px 6px 5px 12px; background:transparent; border:none; color:var(--muted); cursor:pointer; }
+  .subtabs .subtab-name:hover{ color:var(--text); }
+  .subtabs .subtab-wrap.active .subtab-name{ color:#fff; background:rgba(31,111,235,.35); }
+  .subtabs .subtab-thumb{ border:none; border-left:1px solid var(--line); background:transparent; padding:4px 10px; font-size:12px; line-height:1; cursor:pointer; filter:grayscale(1); opacity:.45; }
+  .subtabs .subtab-thumb:hover{ opacity:.8; }
+  .subtabs .subtab-thumb.on{ filter:none; opacity:1; background:rgba(46,204,113,.30); box-shadow:inset 0 0 0 1px rgba(46,204,113,.6); }
+  .subtabs button.reset{ font-size:11px; font-weight:700; padding:5px 11px; border-radius:999px; background:var(--panel2); border:1px dashed var(--line); color:#f6dca0; cursor:pointer; }
+  .subtabs .confMsg{ display:inline-flex; align-items:center; font-size:12px; font-weight:800; letter-spacing:.5px; color:#7ee2a0; background:rgba(46,160,67,.20); border:1px solid rgba(46,160,67,.55); border-radius:999px; padding:5px 13px; }
 
   /* ===== Week strip (tutti i giorni) ===== */
   .week{ display:flex; gap:10px; overflow-x:auto; padding:12px 16px 26px; align-items:flex-start; }
@@ -385,10 +391,20 @@ const STORE_WORKERS = "presenze_divisione_workers_v3";
 const STORE_WEEK    = "presenze_divisione_week_v3";
 const STORE_DEPTS   = "presenze_divisione_depts_v1";
 const STORE_HOLIDAYS= "presenze_divisione_holidays_v1";
+const STORE_CONFIRMS= "presenze_divisione_confirms_v1";
 
 /* ====== Stato ====== */
-let data = { workers:[], week:{}, holidays:{} };
+let data = { workers:[], week:{}, holidays:{}, confirms:{} };
 function isHoliday(iso){ return !!(data.holidays && data.holidays[iso]); }
+/* Conferme presenze per giorno/area: data.confirms[iso][deptId]=true */
+function isConfirmed(iso,deptId){ return !!(data.confirms && data.confirms[iso] && data.confirms[iso][deptId]); }
+function toggleConfirm(iso,deptId){
+  if(!data.confirms) data.confirms={};
+  if(!data.confirms[iso]) data.confirms[iso]={};
+  if(data.confirms[iso][deptId]) delete data.confirms[iso][deptId]; else data.confirms[iso][deptId]=true;
+  if(!Object.keys(data.confirms[iso]).length) delete data.confirms[iso];
+  saveConfirms(); render();
+}
 function toggleHoliday(iso){ if(!data.holidays) data.holidays={}; if(data.holidays[iso]) delete data.holidays[iso]; else data.holidays[iso]=true; saveHolidays(); render(); }
 /* Pasqua (algoritmo di Gauss) e festività italiane + patrono di Roma (San Pietro e Paolo, 29 giugno) */
 function easterDate(year){
@@ -524,6 +540,7 @@ function saveWorkers(){ try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(
 function saveWeek(){ try{ localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{} scheduleFileWrite(); }
 function saveDepts(){ try{ localStorage.setItem(STORE_DEPTS, JSON.stringify(DEPTS)); }catch{} scheduleFileWrite(); cloudPushDepts(); }
 function saveHolidays(){ try{ localStorage.setItem(STORE_HOLIDAYS, JSON.stringify(data.holidays||{})); }catch{} scheduleFileWrite(); cloudPushHolidays(); }
+function saveConfirms(){ try{ localStorage.setItem(STORE_CONFIRMS, JSON.stringify(data.confirms||{})); }catch{} scheduleFileWrite(); cloudPushConfirms(); }
 
 /* ====== Day record ====== */
 function ensureDay(weekKey,iso){
@@ -560,7 +577,7 @@ function normWorker(w){
   };
 }
 function buildPayload(){
-  return { version:3, exportedAt:new Date().toISOString(), depts:DEPTS, workers:data.workers.map(normWorker), week:data.week||{}, holidays:data.holidays||{} };
+  return { version:3, exportedAt:new Date().toISOString(), depts:DEPTS, workers:data.workers.map(normWorker), week:data.week||{}, holidays:data.holidays||{}, confirms:data.confirms||{} };
 }
 function exportJson(){
   downloadJson("presenze_data.json", buildPayload());
@@ -576,7 +593,8 @@ function importJsonText(text){
   for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
   data.week = (obj.week && typeof obj.week==="object") ? obj.week : {};
   data.holidays = (obj.holidays && typeof obj.holidays==="object") ? obj.holidays : {};
-  saveWorkers(); saveWeek(); saveDepts(); saveHolidays(); if(cloudSeeded) cloudPushAll(); render();
+  data.confirms = (obj.confirms && typeof obj.confirms==="object") ? obj.confirms : {};
+  saveWorkers(); saveWeek(); saveDepts(); saveHolidays(); saveConfirms(); if(cloudSeeded) cloudPushAll(); render();
 }
 async function importJson(file){ importJsonText(await file.text()); ioMsg("dati caricati"); }
 
@@ -1157,10 +1175,11 @@ function onCloudValue(snap){
     workers: val.workers ? (Array.isArray(val.workers)?val.workers:Object.values(val.workers)) : [],
     week:(val.week&&typeof val.week==="object")?val.week:{},
     depts: val.depts ? (Array.isArray(val.depts)?val.depts:Object.values(val.depts)) : null,
-    holidays:(val.holidays&&typeof val.holidays==="object")?val.holidays:{}
+    holidays:(val.holidays&&typeof val.holidays==="object")?val.holidays:{},
+    confirms:(val.confirms&&typeof val.confirms==="object")?val.confirms:{}
   };
   const sameDepts = !incoming.depts || JSON.stringify(DEPTS)===JSON.stringify(incoming.depts.map(normDept));
-  if(sameDepts && JSON.stringify({w:data.workers.map(normWorker),k:data.week,h:data.holidays||{}})===JSON.stringify({w:incoming.workers.map(normWorker),k:incoming.week,h:incoming.holidays})) return;
+  if(sameDepts && JSON.stringify({w:data.workers.map(normWorker),k:data.week,h:data.holidays||{},c:data.confirms||{}})===JSON.stringify({w:incoming.workers.map(normWorker),k:incoming.week,h:incoming.holidays,c:incoming.confirms})) return;
   if(expandedKey!==null){ pendingRemote=incoming; return; }   // non disturbare durante la modifica
   applyRemoteNow(incoming);
 }
@@ -1172,14 +1191,16 @@ function applyRemoteNow(incoming){
     for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
     data.week=incoming.week||{};
     data.holidays=incoming.holidays||{};
-    try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); localStorage.setItem(STORE_HOLIDAYS, JSON.stringify(data.holidays)); }catch{}
+    data.confirms=incoming.confirms||{};
+    try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); localStorage.setItem(STORE_HOLIDAYS, JSON.stringify(data.holidays)); localStorage.setItem(STORE_CONFIRMS, JSON.stringify(data.confirms)); }catch{}
   } finally { applyingRemote=false; }
   render();
 }
-function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{}, depts:DEPTS, holidays:data.holidays||{} }); }catch{} }
+function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{}, depts:DEPTS, holidays:data.holidays||{}, confirms:data.confirms||{} }); }catch{} }
 function cloudPushWorkers(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("workers").set(data.workers.map(normWorker)); }catch{} }
 function cloudPushDepts(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("depts").set(DEPTS); }catch{} }
 function cloudPushHolidays(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("holidays").set(data.holidays||{}); }catch{} }
+function cloudPushConfirms(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("confirms").set(data.confirms||{}); }catch{} }
 function cloudPushWeek(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("week").set(data.week||{}); }catch{} }
 function cloudPushRecord(wk,iso,wid){
   if(!cloudRef||applyingRemote||!cloudSeeded) return;
@@ -1249,16 +1270,27 @@ function renderSubTabs(){
   const st=$("subtabs"); if(!st) return; st.innerHTML="";
   if(activeSection!=="produzione" && activeSection!=="divisione"){ st.style.display="none"; return; }
   const depts=DEPTS.filter(d=>d.section===activeSection);
-  if(depts.length<=1){ st.style.display="none"; return; }   // niente filtri se c'è un solo reparto
+  if(!depts.length){ st.style.display="none"; return; }
   st.style.display="";
   const filt=deptFilters[activeSection];
+  const todayIso=toISO(new Date());
+  let allConfirmed=true;
   for(const d of depts){
-    const b=document.createElement("button"); b.type="button"; b.className="subtab"+(filt.has(d.id)?" active":"");
-    b.textContent=d.name;
-    b.addEventListener("click",()=>{ if(filt.has(d.id)) filt.delete(d.id); else filt.add(d.id); render(); });
-    st.appendChild(b);
+    const wrap=document.createElement("span"); wrap.className="subtab-wrap"+(filt.has(d.id)?" active":"");
+    const nameB=document.createElement("button"); nameB.type="button"; nameB.className="subtab-name";
+    nameB.textContent=d.name;
+    nameB.title="Filtra: mostra solo "+d.name;
+    nameB.addEventListener("click",()=>{ if(filt.has(d.id)) filt.delete(d.id); else filt.add(d.id); render(); });
+    const conf=isConfirmed(todayIso,d.id); if(!conf) allConfirmed=false;
+    const thumb=document.createElement("button"); thumb.type="button"; thumb.className="subtab-thumb"+(conf?" on":"");
+    thumb.textContent="👍";
+    thumb.title=conf?("Presenze di oggi confermate per "+d.name+": clic per annullare"):("Conferma le presenze di oggi per "+d.name);
+    thumb.addEventListener("click",e=>{ e.stopPropagation(); toggleConfirm(todayIso,d.id); });
+    wrap.appendChild(nameB); wrap.appendChild(thumb);
+    st.appendChild(wrap);
   }
   if(filt.size){ const r=document.createElement("button"); r.type="button"; r.className="subtab reset"; r.textContent="✕ Mostra tutti"; r.addEventListener("click",()=>{ filt.clear(); render(); }); st.appendChild(r); }
+  if(allConfirmed){ const m=document.createElement("span"); m.className="confMsg"; m.textContent="✅ CONFERMATE PRESENZE ODIERNE"; st.appendChild(m); }
 }
 function render(){
   if(isEmbed && activeSection==="editor") activeSection="produzione";
@@ -1670,6 +1702,7 @@ function bootstrap(){
   const dp=loadStore(STORE_DEPTS);
   if(Array.isArray(dp) && dp.length){ setDepts(dp); } else { setDepts(DEFAULT_DEPTS); saveDepts(); }
   const hol=loadStore(STORE_HOLIDAYS); if(hol && typeof hol==="object") data.holidays=hol;
+  const cf=loadStore(STORE_CONFIRMS); if(cf && typeof cf==="object") data.confirms=cf;
   const w=loadStore(STORE_WORKERS);
   if(Array.isArray(w) && w.length){ data.workers=w.map(normWorker); }
   else{
