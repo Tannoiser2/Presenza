@@ -541,15 +541,23 @@ function effShift(worker,rec,date){
   if(rec.shift==="morning"||rec.shift==="afternoon") return rec.shift;
   return autoWorkShift(worker,date);
 }
-/* Raggruppa gli item di un bucket: prima i turni "forzati" (per codice), poi i reparti */
+/* Raggruppa gli item di un bucket. I turni "forzati" sono etichettati per Area · Turno · Orario
+   (l'orario/codice viene aggiunto in fase di render come per i reparti di produzione). */
 function groupByTurnoThenDept(items, section, shiftId){
-  const groups=[], byTurno={}, byDept={};
+  const groups=[], ovGroups={}, byDept={};
   for(const x of items){
     const ov=effTurnoOverride(x.worker,x.rec);
-    if(ov){ (byTurno[ov]=byTurno[ov]||[]).push(x); }
+    if(ov){ const k=x.worker.deptId+"|"+ov; (ovGroups[k]=ovGroups[k]||{deptId:x.worker.deptId,code:ov,items:[]}).items.push(x); }
     else { (byDept[x.worker.deptId]=byDept[x.worker.deptId]||[]).push(x); }
   }
-  for(const t of TURNI){ const g=byTurno[t.code]; if(g&&g.length) groups.push({ label:"Turno "+t.code, hours:t.hours, items:g }); }
+  // gruppi turno forzato: ordinati per turno, poi per reparto — etichetta = nome area (l'orario compare nel render)
+  for(const t of TURNI){
+    for(const d of DEPTS){
+      const g=ovGroups[d.id+"|"+t.code];
+      if(g && g.items.length) groups.push({ label:d.name, hours:t.hours, items:g.items });
+    }
+  }
+  // gruppi normali per reparto
   for(const d of DEPTS){
     if(d.section!==section) continue;
     const g=byDept[d.id]; if(!g||!g.length) continue;
