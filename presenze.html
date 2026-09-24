@@ -203,6 +203,7 @@
 <div class="tabs" id="tabs"></div>
 <div class="subtabs" id="subtabs"></div>
 
+<div id="updBanner" class="filebanner warn" style="display:none"></div>
 <div id="cloudBanner" class="filebanner"></div>
 <div id="fileBanner" class="filebanner"></div>
 
@@ -392,6 +393,8 @@ function shiftsFor(date, section){
 }
 const DOW = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
 const MON = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+/* Versione dell'app (AAAAMMGG): incrementare a ogni release. Serve per avvisare chi usa una copia vecchia. */
+const APP_VERSION = 20260924;
 
 const STORE_WORKERS = "presenze_divisione_workers_v3";
 const STORE_WEEK    = "presenze_divisione_week_v3";
@@ -1176,6 +1179,16 @@ function downloadWeeklyExcel(){
 const CLOUD_CFG_KEY="presenze_fb_config", CLOUD_ROOM_KEY="presenze_fb_room";
 let cloudRef=null, cloudSeeded=false, applyingRemote=false, pendingRemote=null;
 function cloudStatus(text,cls){ const b=$("cloudBanner"); if(!b) return; b.className="filebanner"+(cls?(" "+cls):""); b.textContent=text||""; }
+/* Avviso "aggiorna" se il cloud ha una versione più recente di questa copia */
+function checkUpdateBanner(cloudV){
+  const b=$("updBanner"); if(!b) return;
+  if(APP_VERSION < (Number(cloudV)||0)){
+    b.style.display="";
+    b.textContent="⚠️ Stai usando una copia NON aggiornata: alcune funzioni potrebbero mancare o non allinearsi. Chiedi il file aggiornato al responsabile (☁️ Cloud → 📤 Copia per i colleghi).";
+  }else{
+    b.style.display="none"; b.textContent="";
+  }
+}
 function getCloudCfg(){ try{ const r=localStorage.getItem(CLOUD_CFG_KEY); return r?JSON.parse(r):null; }catch{ return null; } }
 function getCloudRoom(){ return localStorage.getItem(CLOUD_ROOM_KEY) || "divisione"; }
 function parseFirebaseConfig(text){
@@ -1213,6 +1226,10 @@ function onCloudValue(snap){
   }
   cloudSeeded=true;
   cloudStatus("☁️ Condivisione attiva (stanza: "+room+")","ok");
+  // controllo versione: se il cloud ha una versione più recente della mia, avviso di aggiornare; se la mia è più recente, la registro
+  const cloudV=Number(val.appVersion)||0;
+  if(APP_VERSION > cloudV){ try{ cloudRef.child("appVersion").set(APP_VERSION); }catch{} }
+  checkUpdateBanner(cloudV);
   const incoming={
     workers: val.workers ? (Array.isArray(val.workers)?val.workers:Object.values(val.workers)) : [],
     week:(val.week&&typeof val.week==="object")?val.week:{},
@@ -1238,7 +1255,7 @@ function applyRemoteNow(incoming){
   } finally { applyingRemote=false; }
   render();
 }
-function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{}, depts:DEPTS, holidays:data.holidays||{}, confirms:data.confirms||{} }); }catch{} }
+function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{}, depts:DEPTS, holidays:data.holidays||{}, confirms:data.confirms||{}, appVersion:APP_VERSION }); }catch{} }
 function cloudPushWorkers(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("workers").set(data.workers.map(normWorker)); }catch{} }
 function cloudPushDepts(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("depts").set(DEPTS); }catch{} }
 function cloudPushHolidays(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("holidays").set(data.holidays||{}); }catch{} }
