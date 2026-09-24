@@ -243,8 +243,10 @@
       <label class="field"><span>Nuovo reparto</span><input id="ndName" type="text" placeholder="Es. Magazzino" /></label>
       <label class="field"><span>Area</span><select id="ndSection"><option value="produzione">Area Produzione</option><option value="divisione">Area Amministrativa</option></select></label>
       <label class="field" id="ndShiftWrap"><span>A turni (Squadra A/B)</span><select id="ndShift"><option value="0">No (orario fisso)</option><option value="1">Sì</option></select></label>
-      <label class="field" id="ndHoursMWrap"><span>Orario mattina</span><input id="ndHoursM" type="text" placeholder="7:00–15:10" /></label>
-      <label class="field" id="ndHoursAWrap"><span>Orario pomeriggio</span><input id="ndHoursA" type="text" placeholder="12:20–20:30" /></label>
+      <label class="field" id="ndHoursMWrap"><span>Orario mattina</span><input id="ndHoursM" type="text" list="turniMatt" placeholder="scrivi o scegli turno" /></label>
+      <label class="field" id="ndHoursAWrap"><span>Orario pomeriggio</span><input id="ndHoursA" type="text" list="turniPom" placeholder="scrivi o scegli turno" /></label>
+      <datalist id="turniMatt"></datalist>
+      <datalist id="turniPom"></datalist>
       <label class="field" id="ndHoursWrap"><span>Orario</span><input id="ndHours" type="text" placeholder="8:00–16:20" /></label>
       <label class="field"><span>Delocalizz. 🏠</span><select id="ndDeloc"><option value="1">Sì</option><option value="0">No</option></select></label>
       <label class="field"><span>Turno G192 ⏰</span><select id="ndG192"><option value="0">No</option><option value="1">Sì</option></select></label>
@@ -505,10 +507,12 @@ const TURNI = [
   { code:"G191", hours:"12:20–20:30", slot:"afternoon" },
 ];
 function turnoByCode(c){ return TURNI.find(t=>t.code===c); }
-/* Popola un <select> di turni: automatico, poi gruppo Mattina, poi gruppo Pomeriggio */
+function turnoInfo(c){ return c==="NONE" ? {code:"NONE",hours:"8:00–16:20",slot:"morning"} : turnoByCode(c); }
+/* Popola un <select> di turni: automatico, Nessuno (8-16:20), poi gruppo Mattina, poi gruppo Pomeriggio */
 function fillTurnoSelect(sel,current,autoLabel){
   sel.innerHTML="";
   const oa=document.createElement("option"); oa.value=""; oa.textContent=autoLabel; sel.appendChild(oa);
+  const on=document.createElement("option"); on.value="NONE"; on.textContent="Nessuno (8:00–16:20)"; if((current||"")==="NONE") on.selected=true; sel.appendChild(on);
   const gm=document.createElement("optgroup"); gm.label="── Mattina ──";
   const ga=document.createElement("optgroup"); ga.label="── Pomeriggio ──";
   for(const t of TURNI){ const o=document.createElement("option"); o.value=t.code; o.textContent=t.code+" ("+t.hours+")"; if((current||"")===t.code) o.selected=true; (t.slot==="morning"?gm:ga).appendChild(o); }
@@ -519,7 +523,7 @@ const TURNO_CODE = { "7:00-15:10":"G190", "12:20-20:30":"G191", "11:20-19:30":"G
 function turnoCode(hours){ return TURNO_CODE[String(hours||"").replace(/[–—-]/g,"-").replace(/\s+/g,"")] || ""; }
 /* Turno "forzato" di una persona: override manuale (rec.turno), G192, oppure il turno predefinito del reparto */
 function effTurnoOverride(worker,rec){
-  if(rec && rec.turno && turnoByCode(rec.turno)) return rec.turno;
+  if(rec && rec.turno && (rec.turno==="NONE"||turnoByCode(rec.turno))) return rec.turno;
   if(isG192(worker,rec)) return "G192";
   const d=deptById(worker&&worker.deptId);
   if(d && d.defaultTurno && turnoByCode(d.defaultTurno)) return d.defaultTurno;
@@ -532,11 +536,12 @@ function effShift(worker,rec,date){
   if(sectionOf(worker.deptId)==="divisione"){
     if(absent) return "absent";
     const ovd=effTurnoOverride(worker,rec);
-    return ovd ? turnoByCode(ovd).slot : "present";                 // area amministrativa: presenza, o turno (mattina/pomeriggio) se attivato
+    if(ovd==="NONE") return "present";                               // "Nessuno" in Amministrativa = presenza normale 8-16:20
+    return ovd ? turnoInfo(ovd).slot : "present";                    // area amministrativa: presenza, o turno se attivato
   }
   if(absent) return "absent";
   const ov=effTurnoOverride(worker,rec);
-  if(ov) return turnoByCode(ov).slot;                               // turno forzato/G192/predefinito → sua fascia
+  if(ov) return turnoInfo(ov).slot;                                  // turno forzato/G192/predefinito/Nessuno → sua fascia
   if(isNoShift(worker)) return "morning";
   if(rec.shift==="morning"||rec.shift==="afternoon") return rec.shift;
   return autoWorkShift(worker,date);
@@ -546,15 +551,16 @@ function effShift(worker,rec,date){
 function groupByTurnoThenDept(items, section, shiftId){
   const groups=[], ovGroups={}, byDept={};
   for(const x of items){
-    const ov=effTurnoOverride(x.worker,x.rec);
+    let ov=effTurnoOverride(x.worker,x.rec);
+    if(ov==="NONE" && section==="divisione") ov=null;   // in Amministrativa "Nessuno" = normale (8-16:20), stessa colonna del reparto
     if(ov){ const k=x.worker.deptId+"|"+ov; (ovGroups[k]=ovGroups[k]||{deptId:x.worker.deptId,code:ov,items:[]}).items.push(x); }
     else { (byDept[x.worker.deptId]=byDept[x.worker.deptId]||[]).push(x); }
   }
-  // gruppi turno forzato: ordinati per turno, poi per reparto — etichetta = nome area (l'orario compare nel render)
-  for(const t of TURNI){
+  // gruppi turno forzato: ordinati per turno (incl. "Nessuno"), poi per reparto — etichetta = nome area (l'orario compare nel render)
+  for(const code of [...TURNI.map(t=>t.code),"NONE"]){
     for(const d of DEPTS){
-      const g=ovGroups[d.id+"|"+t.code];
-      if(g && g.items.length) groups.push({ label:d.name, hours:t.hours, items:g.items });
+      const g=ovGroups[d.id+"|"+code];
+      if(g && g.items.length) groups.push({ label:d.name, hours:turnoInfo(code).hours, items:g.items });
     }
   }
   // gruppi normali per reparto
@@ -851,13 +857,13 @@ function downloadDailyPDF(){
   const date=new Date();                 // PDF di OGGI — sempre AREA PRODUZIONE
   const iso=toISO(date), wk=getISOWeekKey(date);
   const ORANGE=[0.99,0.65,0.08], BLUE=[0.36,0.61,0.84], RED=[0.86,0.16,0.16], YELLOW=[1,0.92,0.32], GRAY=[0.62,0.62,0.62], GRAYCELL=[0.82,0.82,0.82], LINE=[0.55,0.55,0.55];
-  const TURNO_FILL={ "7:00-15:10":BLUE, "11:20-19:30":ORANGE, "12:20-20:30":YELLOW, "6:30-14:40":RED, "9:50-18:00":[0.62,0.44,0.86] };  // colore casella per orario (G032 viola)
+  const TURNO_FILL={ "7:00-15:10":BLUE, "11:20-19:30":ORANGE, "12:20-20:30":YELLOW, "6:30-14:40":RED, "9:50-18:00":[0.62,0.44,0.86], "8:00-16:20":GRAYCELL };  // colore casella per orario
   const inProd=w=>sectionOf(w.deptId)==="produzione";
   const recOf=w=>getRec(wk,iso,w.id);
   function orarioOf(w,rec){
     const sh=effShift(w,rec,date);
     if(sh==="absent"||sh==="home"||sh==="work") return null;
-    const ov=effTurnoOverride(w,rec); if(ov) return turnoByCode(ov).hours;
+    const ov=effTurnoOverride(w,rec); if(ov) return turnoInfo(ov).hours;
     if(isNoShift(w)) return hoursFor(w.deptId,"morning");
     return hoursFor(w.deptId, sh==="afternoon"?"afternoon":"morning");
   }
@@ -1114,7 +1120,7 @@ function downloadWeeklyExcel(){
       else{
         let hours=null, base="";
         const ov=effTurnoOverride(w,rec);
-        if(ov){ hours=turnoByCode(ov).hours; tuS=(turnoByCode(ov).slot==="afternoon")?10:9; }
+        if(ov){ const ti=turnoInfo(ov); hours=ti.hours; tuS=(ti.slot==="afternoon")?10:9; if(ov==="NONE"){ base="Fisso"; tuS=11; } }
         else if(isNoShift(w)){ hours=hoursFor(w.deptId,"morning"); base="Fisso"; tuS=11; }
         else if(sh==="morning"){ hours=hoursFor(w.deptId,"morning"); tuS=9; }
         else if(sh==="afternoon"){ hours=hoursFor(w.deptId,"afternoon"); tuS=10; }
@@ -1356,6 +1362,9 @@ function deptHoursDesc(d){
 function renderEditorPanel(){
   fillAddMenus();
   updateDeptForm();
+  // datalist orari: turni preimpostati (mattina/pomeriggio) da poter scegliere o scrivere a mano
+  const dm=$("turniMatt"), da=$("turniPom");
+  if(dm&&da){ dm.innerHTML=""; da.innerHTML=""; for(const t of TURNI){ const o=document.createElement("option"); o.value=t.hours; o.label=t.code+" ("+t.hours+")"; (t.slot==="morning"?dm:da).appendChild(o); } }
   const dl=$("deptList"); if(!dl) return; dl.innerHTML="";
   for(const d of DEPTS){
     const row=document.createElement("div"); row.className="deptRow";
@@ -1601,7 +1610,8 @@ function buildEditor(worker,rec,iso,curShift){
   tsel.addEventListener("change",()=>{ setRec(wk,iso,worker.id,{turno:tsel.value}); render(); });
   ed.appendChild(tsel);
 
-  // anagrafica
+  // anagrafica (modifica nome/area/squadra/leader/elimina): solo versione Editor, nascosta ai colleghi
+  if(!isEmbed){
   const ana=document.createElement("div"); ana.className="anaBox";
   const nameInp=document.createElement("input"); nameInp.type="text"; nameInp.value=worker.name; nameInp.maxLength=40; nameInp.placeholder="Nome";
   nameInp.addEventListener("input",()=>{ worker.name=normName(nameInp.value); saveWorkers(); });
@@ -1636,6 +1646,7 @@ function buildEditor(worker,rec,iso,curShift){
   });
   ana.appendChild(del);
   ed.appendChild(ana);
+  }
 
   return ed;
 }
@@ -1853,6 +1864,9 @@ function init(){
     render();
     fsaReconnect();   // ricollega il file dati se già scelto in precedenza
     initCloud();      // attiva la condivisione se già configurata
+    // controllo a mezzanotte: al cambio di giorno riaggiorna la vista (pollici di conferma azzerati)
+    let curDayISO=toISO(new Date());
+    setInterval(()=>{ const d=toISO(new Date()); if(d!==curDayISO){ curDayISO=d; if(expandedKey===null) render(); } }, 30000);
   }catch(e){
     $("jsStatus").textContent="ERRORE";
     ioMsg((e?.stack||e?.message||String(e)));
