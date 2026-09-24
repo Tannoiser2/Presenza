@@ -1609,9 +1609,9 @@ function buildBadge(worker,rec,iso,curShift,date){
       delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
     }
     head.appendChild(delBtn);
-    // conteggio delocalizzazioni del mese, accanto alla casetta
-    const dc=delocCountMonth(worker.id, iso.slice(0,7));
-    if(dc>0){ const c=document.createElement("span"); c.className="delCount"; c.textContent=dc; c.title="Delocalizzato "+dc+" giorn"+(dc===1?"o":"i")+" a "+MON[date.getMonth()]; head.appendChild(c); }
+    // conteggio delocalizzazioni del mese, accanto alla casetta (non nella copia colleghi)
+    if(!isEmbed){ const dc=delocCountMonth(worker.id, iso.slice(0,7));
+      if(dc>0){ const c=document.createElement("span"); c.className="delCount"; c.textContent=dc; c.title="Delocalizzato "+dc+" giorn"+(dc===1?"o":"i")+" a "+MON[date.getMonth()]; head.appendChild(c); } }
   }
 
   if(!locked) head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
