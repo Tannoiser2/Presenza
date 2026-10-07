@@ -569,9 +569,12 @@ function effShift(worker,rec,date){
    (l'orario/codice viene aggiunto in fase di render come per i reparti di produzione). */
 function groupByTurnoThenDept(items, section, shiftId){
   const groups=[], ovGroups={}, byDept={};
+  const nh = h => String(h||"").replace(/[–—-]/g,"-").replace(/\s+/g,"");
   for(const x of items){
     let ov=effTurnoOverride(x.worker,x.rec);
     if(ov==="NONE" && section==="divisione") ov=null;   // in Amministrativa "Nessuno" = normale (8-16:20), stessa colonna del reparto
+    // se il turno forzato coincide con l'orario normale del reparto in questa fascia, non separarlo (stesso turno = stesso gruppo)
+    if(ov && nh(turnoInfo(ov).hours)===nh(hoursFor(x.worker.deptId, shiftId))) ov=null;
     if(ov){ const k=x.worker.deptId+"|"+ov; (ovGroups[k]=ovGroups[k]||{deptId:x.worker.deptId,code:ov,items:[]}).items.push(x); }
     else { (byDept[x.worker.deptId]=byDept[x.worker.deptId]||[]).push(x); }
   }
@@ -873,11 +876,14 @@ function pdfTextC(cmd,xc,yTop,size,bold,text,rgb){ const w=pdfLatin1(text).lengt
 function hhStartMin(h){ const m=String(h).split(/[–-]/)[0].trim().match(/(\d{1,2})[:.](\d{2})/); return m?(+m[1]*60+ +m[2]):9999; }
 
 function downloadDailyPDF(){
-  const date=new Date();                 // PDF di OGGI — sempre AREA PRODUZIONE
+  if(activeSection!=="produzione" && activeSection!=="divisione"){ ioMsg("Apri una scheda (Produzione o Amministrativa) per scaricare il PDF."); return; }
+  const sect=activeSection;                 // il PDF riguarda l'area della scheda attiva
+  const secLabel = sect==="divisione" ? "Area Amministrativa" : "Area Produzione";
+  const date=new Date();                 // PDF di OGGI
   const iso=toISO(date), wk=getISOWeekKey(date);
   const ORANGE=[0.99,0.65,0.08], BLUE=[0.36,0.61,0.84], RED=[0.86,0.16,0.16], YELLOW=[1,0.92,0.32], GRAY=[0.62,0.62,0.62], GRAYCELL=[0.82,0.82,0.82], LINE=[0.55,0.55,0.55];
   const TURNO_FILL={ "7:00-15:10":BLUE, "11:20-19:30":ORANGE, "12:20-20:30":YELLOW, "6:30-14:40":RED, "9:50-18:00":[0.62,0.44,0.86], "8:00-16:20":GRAYCELL };  // colore casella per orario
-  const inProd=w=>sectionOf(w.deptId)==="produzione";
+  const inSect=w=>sectionOf(w.deptId)===sect;
   const recOf=w=>getRec(wk,iso,w.id);
   function orarioOf(w,rec){
     const sh=effShift(w,rec,date);
@@ -913,7 +919,7 @@ function downloadDailyPDF(){
 
   // colonne orari distinte (unificate per orario uguale); i "senza turno" (orario fisso) per primi, poi per ora d'inizio
   const orariMap=new Map();
-  for(const w of data.workers){ if(!inProd(w)) continue; const o=orarioOf(w,recOf(w)); if(o){ const k=hKey(o), fx=isNoShift(w); if(!orariMap.has(k)) orariMap.set(k,{disp:o,start:hhStartMin(o),fixed:fx}); else if(fx) orariMap.get(k).fixed=true; } }
+  for(const w of data.workers){ if(!inSect(w)) continue; const o=orarioOf(w,recOf(w)); if(o){ const k=hKey(o), fx=isNoShift(w); if(!orariMap.has(k)) orariMap.set(k,{disp:o,start:hhStartMin(o),fixed:fx}); else if(fx) orariMap.get(k).fixed=true; } }
   const cols=[...orariMap.values()].sort((a,b)=>((b.fixed?1:0)-(a.fixed?1:0))||(a.start-b.start)).map(v=>v.disp);
 
   const PW=595.28, PH=841.89, ML=26, MR=26, minNote=110;
@@ -927,12 +933,14 @@ function downloadDailyPDF(){
   // intestazione
   let y=30;
   pdfTextC(cmd, PW/2, y, 15, true, "Divisione Editoria e Stampa"); y+=15;
-  pdfTextC(cmd, PW/2, y, 10, true, "Area Produzione"); y+=20;
+  pdfTextC(cmd, PW/2, y, 10, true, secLabel); y+=20;
   pdfTextC(cmd, PW/2, y, 17, true, dateLabelIT(date));
   if(isHoliday(iso)){ y+=13; pdfTextC(cmd, PW/2, y, 11, true, "— GIORNO FESTIVO —", RED); }
-  const teamM=isMorningTeam("A",date)?"A":"B";
-  pdfTextCol(cmd, PW-MR-22, 38, 26, true, teamM, BLUE);
-  pdfTextC(cmd, PW-MR-9, 52, 6.5, false, "turno mattina");
+  if(sect==="produzione"){
+    const teamM=isMorningTeam("A",date)?"A":"B";
+    pdfTextCol(cmd, PW-MR-22, 38, 26, true, teamM, BLUE);
+    pdfTextC(cmd, PW-MR-9, 52, 6.5, false, "turno mattina");
+  }
   y+=14;
 
   // intestazione colonne
@@ -985,7 +993,7 @@ function downloadDailyPDF(){
     pdfRect(cmd, xVar, top, wVar, rowH, null, LINE);
     let vt="";
     if(absent) vt="Assente";
-    else if(!isNoShift(w)&&!isWeekend(date)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,date)) vt="cambio turno";
+    else if(sect==="produzione" && !isNoShift(w)&&!isWeekend(date)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,date)) vt="cambio turno";
     if(vt) pdfTextC(cmd, xVar+wVar/2, midBase, 8, false, vt);
     // Note (multilinea, centrate verticalmente)
     pdfRect(cmd, xNote, top, wNote, rowH, null, LINE);
@@ -998,7 +1006,7 @@ function downloadDailyPDF(){
   // dentro ogni reparto a turni: prima Turno A poi Turno B; in ogni gruppo i Leader per primi
   const cont=()=>{ pdfText(cmd, ML, y+10, 8, false, "(continua…)"); };
   for(const d of DEPTS){
-    if(d.section!=="produzione") continue;
+    if(d.section!==sect) continue;
     const members=data.workers.filter(w=>w.deptId===d.id);
     if(!members.length) continue;
     if(stop()){ cont(); break; }
@@ -1020,11 +1028,11 @@ function downloadDailyPDF(){
   // firme
   const fy=Math.min(y+40, PH-30);
   pdfText(cmd, ML, fy, 9, true, "IL TITOLARE DI DIVISIONE");
-  pdfText(cmd, PW-MR-150, fy-14, 9, true, "IL CAPO OFFICINA");
+  pdfText(cmd, PW-MR-150, fy-14, 9, true, sect==="produzione" ? "IL CAPO OFFICINA" : "IL RESPONSABILE");
   pdfLine(cmd, PW-MR-150, fy, PW-MR, fy);
 
-  downloadBlob(`Presenze_produzione_${iso}.pdf`, buildPdf(cmd.join("\n")+"\n"), "application/pdf");
-  ioMsg("PDF giornaliero scaricato");
+  downloadBlob(`Presenze_${sect}_${iso}.pdf`, buildPdf(cmd.join("\n")+"\n"), "application/pdf");
+  ioMsg("PDF giornaliero ("+secLabel+") scaricato");
 }
 
 /* ====== Excel settimanale (.xlsx reale, Lun–Ven) ====== */
