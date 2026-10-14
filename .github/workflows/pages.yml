@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - claude/affectionate-pascal-b8moly
-      - main
   workflow_dispatch:
 
 permissions:
