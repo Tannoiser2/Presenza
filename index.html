@@ -1,0 +1,1927 @@
+<!doctype html>
+<html lang="it">
+<head>
+<script>window.PRESENZE_FB_EMBED={"cfg":{"apiKey":"AIzaSyB47B8ZaSu3P6E8k7exBEhDQDxam-QbL3o","authDomain":"presenze-divisione.firebaseapp.com","databaseURL":"https://presenze-divisione-default-rtdb.europe-west1.firebasedatabase.app","projectId":"presenze-divisione","storageBucket":"presenze-divisione.firebasestorage.app","messagingSenderId":"1049989891164","appId":"1:1049989891164:web:c7286d03ec4b020eb49299","measurementId":"G-2C5PG9ECPV"},"room":"divisione"};</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Presenze Divisione — Settimana</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121826; --panel2:#0f1522;
+    --text:#e6edf3; --muted:#9fb0c0; --line:#223044;
+    --m-bar:#1f6feb; --p-bar:#f6c26a; --a-bar:#ff6b6b;
+    --ok:#2ecc71;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--text); }
+  header{ padding:12px 16px; border-bottom:1px solid var(--line); display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+  h1{ font-size:16px; margin:0; font-weight:800; letter-spacing:.3px; }
+  .muted{ color:var(--muted); }
+  .small{ font-size:12px; }
+  button,select,input{ background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:7px 10px; font-size:13px; }
+  button{ cursor:pointer; }
+  button:hover{ border-color:#30445f; }
+  button.ghost{ background:transparent; }
+  button.primary{ background:rgba(31,111,235,.18); border-color:rgba(31,111,235,.55); }
+  button.danger{ background:#3a1115; border-color:#6b1a22; }
+  .toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .weeknav{ display:flex; align-items:center; gap:10px; }
+  .weeknav .wklabel{ font-weight:800; font-size:13px; min-width:240px; text-align:center; line-height:1.25; }
+
+  /* ===== Schede (tab) ===== */
+  .tabs{ display:flex; gap:6px; padding:10px 16px 0; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+  .tabs button{ font-weight:800; font-size:13px; padding:9px 16px; border-radius:10px 10px 0 0; background:var(--panel2); border:1px solid var(--line); border-bottom:none; color:var(--muted); position:relative; top:1px; }
+  .tabs button:hover{ color:var(--text); }
+  .tabs button.active{ color:var(--text); background:var(--panel); border-color:#30445f; }
+  /* sotto-linguette: filtri per reparto/area + conferma presenze */
+  .subtabs{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:8px 16px 0; }
+  .subtabs .subtab-wrap{ display:inline-flex; align-items:stretch; border:1px solid var(--line); border-radius:999px; background:var(--panel2); overflow:hidden; }
+  .subtabs .subtab-wrap.active{ border-color:rgba(31,111,235,.7); }
+  .subtabs .subtab-name{ font-size:11px; font-weight:700; padding:5px 6px 5px 12px; background:transparent; border:none; color:var(--muted); cursor:pointer; }
+  .subtabs .subtab-name:hover{ color:var(--text); }
+  .subtabs .subtab-wrap.active .subtab-name{ color:#fff; background:rgba(31,111,235,.35); }
+  .subtabs .subtab-thumb{ border:none; border-left:1px solid var(--line); background:transparent; padding:4px 10px; font-size:12px; line-height:1; cursor:pointer; filter:grayscale(1); opacity:.45; }
+  .subtabs .subtab-thumb:hover{ opacity:.8; }
+  .subtabs .subtab-thumb.on{ filter:none; opacity:1; background:rgba(46,204,113,.30); box-shadow:inset 0 0 0 1px rgba(46,204,113,.6); }
+  .subtabs button.reset{ font-size:11px; font-weight:700; padding:5px 11px; border-radius:999px; background:var(--panel2); border:1px dashed var(--line); color:#f6dca0; cursor:pointer; }
+  .subtabs .confMsg{ display:inline-flex; align-items:center; font-size:12px; font-weight:800; letter-spacing:.5px; color:#7ee2a0; background:rgba(46,160,67,.20); border:1px solid rgba(46,160,67,.55); border-radius:999px; padding:5px 13px; }
+
+  /* ===== Week strip (tutti i giorni) ===== */
+  .week{ display:flex; gap:10px; overflow-x:auto; padding:12px 16px 26px; align-items:flex-start; }
+  .day{ flex:1 0 215px; min-width:215px; max-width:340px; border:1px solid var(--line); border-radius:14px; background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
+  .day.today{ box-shadow:0 0 0 2px rgba(46,204,113,.45); background:rgba(46,204,113,.12); }
+  .day.today .dayHead{ background:rgba(46,204,113,.18); }
+  .day.holiday .dayHead{ background:rgba(255,107,107,.20); }
+  .festBtn{ margin-top:5px; border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:999px; padding:2px 9px; font-size:10px; font-weight:700; cursor:pointer; }
+  .festBtn:hover{ color:var(--text); }
+  .festBtn.on{ background:rgba(255,107,107,.22); border-color:rgba(255,107,107,.6); color:#ffd1d1; }
+
+  /* colonna weekend collassabile */
+  .weekendWrap{ display:flex; align-items:stretch; gap:10px; flex:0 0 auto; }
+  .weekendWrap .handle{ writing-mode:vertical-rl; text-orientation:mixed; cursor:pointer; user-select:none;
+    background:rgba(46,160,67,.15); border:1px solid var(--line); border-radius:12px; padding:10px 7px;
+    font-weight:800; font-size:12px; letter-spacing:.5px; color:#7ee2a0; display:flex; align-items:center; justify-content:center; white-space:nowrap; }
+  .weekendWrap .handle:hover{ background:rgba(46,160,67,.28); }
+  .weekendWrap .wkndDays{ display:flex; gap:10px; }
+  .weekendWrap.collapsed .wkndDays{ display:none; }
+  .dayHead{ padding:9px 10px; text-align:center; border-bottom:1px solid var(--line); background:rgba(255,255,255,.03); }
+  .dayHead .dow{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+  .dayHead .dnum{ font-weight:900; font-size:14px; }
+  .dayBody{ display:flex; flex-direction:column; gap:8px; padding:8px; }
+
+  .shift{ border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+  .shiftHead{ padding:6px 9px; font-weight:900; font-size:11px; letter-spacing:.7px; text-transform:uppercase; display:flex; justify-content:space-between; align-items:center; }
+  .shift.morning   .shiftHead{ background:var(--m-bar); color:#fff; }
+  .shift.afternoon .shiftHead{ background:var(--p-bar); color:#1b1300; }
+  .shift.absent    .shiftHead{ background:var(--a-bar); color:#330000; }
+  .shift.work .shiftHead{ background:#2ea043; color:#fff; }
+  .shift.present .shiftHead{ background:#2ea043; color:#fff; }
+  .shift.home .shiftHead{ background:#39424f; color:#cfd8e3; }
+  .day.weekend .dayHead{ background:rgba(46,160,67,.12); }
+  .day.weekend .dayHead .dow{ color:#7ee2a0; }
+  .shiftHead .n{ font-size:11px; opacity:.9; }
+  .shiftBody{ padding:7px; display:flex; flex-direction:column; gap:7px; min-height:34px; }
+  .shift.dropok .shiftBody{ outline:2px dashed rgba(255,255,255,.5); outline-offset:-3px; border-radius:8px; }
+
+  .deptGroup .deptName{ font-size:10px; font-weight:800; letter-spacing:.4px; color:var(--muted); text-transform:uppercase; margin:0 2px 4px; display:flex; align-items:center; gap:6px; }
+  .deptGroup .deptName .deptHours{ font-size:8.5px; font-weight:600; opacity:.85; }
+  .deptGroup .deptName::before{ content:""; flex:1; height:1px; background:var(--line); }
+  .deptGroup .deptName::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .deptBadges{ display:flex; flex-direction:column; gap:6px; }
+  .deptGroup + .deptGroup{ margin-top:6px; }
+  .emptyHint{ color:var(--muted); font-size:11px; text-align:center; padding:6px 2px; opacity:.7; }
+
+  /* ===== Badge ===== */
+  .badge{ border:1px solid var(--line); border-radius:10px; background:rgba(0,0,0,.20); padding:6px 8px; cursor:grab; user-select:none; }
+  .badge:active{ cursor:grabbing; }
+  .badge.dragging{ opacity:.4; }
+  .badge.nodrag{ cursor:default; }
+  .badge.open{ background:rgba(255,255,255,.06); }
+  /* cambio turno: badge spostato in un turno diverso da quello automatico */
+  .badge.changed{ background:rgba(255,107,107,.22); border-color:rgba(255,107,107,.6); }
+  .shift.morning   .badge{ border-left:3px solid var(--m-bar); }
+  .shift.afternoon .badge{ border-left:3px solid var(--p-bar); }
+  .shift.absent    .badge{ border-left:3px solid var(--a-bar); }
+  .shift.work .badge{ border-left:3px solid #2ea043; }
+  .shift.present .badge{ border-left:3px solid #2ea043; }
+  .shift.home .badge{ border-left:3px solid #39424f; }
+  .badge.dim{ opacity:.6; }
+  .badge.dim:hover{ opacity:.85; }
+  .badgeHead{ display:flex; align-items:center; gap:6px; }
+  .badgeName{ font-weight:700; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .badge.isAbsent .badgeName{ color:var(--a-bar); }
+  .badge.isDeloc .badgeName{ opacity:.6; }   /* delocalizzato: nome al 60% */
+  /* versione colleghi: giornate passate non modificabili */
+  .badge.locked{ cursor:default; }
+  .day.locked .dayHead .dnum::after{ content:" 🔒"; font-size:11px; opacity:.7; }
+  .chip{ font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
+  .chip.crown{ border:none; padding:0; font-size:12px; }
+  .chip.deloc{ border:none; padding:0; font-size:12px; }
+  .chip.changeChip{ border:none; padding:0; font-size:12px; }
+  .chip.star{ color:#e6edf3; border:none; padding:0; font-size:11px; }
+  /* toggle delocalizzato sul badge */
+  .delBtn,.g192Btn{ border:none; background:transparent; cursor:pointer; padding:0 1px; font-size:13px; line-height:1; opacity:.25; filter:grayscale(1); }
+  .delBtn:hover,.g192Btn:hover{ opacity:.6; }
+  .delBtn.on,.g192Btn.on{ opacity:1; filter:none; }
+  .delBtn.on:hover,.g192Btn.on:hover{ opacity:.85; }
+  .delCount{ font-size:9px; font-weight:800; color:#7ab7ff; margin-left:-2px; margin-right:1px; }
+  .badgeStatus{ font-size:10px; color:var(--muted); margin-top:2px; }
+  .badgeStatusInline{ font-size:10px; font-weight:400; color:var(--muted); }
+  .badgeNote{ font-size:10px; color:#cfe0f0; margin-top:2px; overflow-wrap:anywhere; }
+
+  /* ===== Inline editor ===== */
+  .editor{ margin-top:7px; padding-top:7px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:6px; }
+  .editor select, .editor input{ font-size:12px; padding:5px 6px; width:100%; }
+  .editor label.ctlab{ display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); cursor:pointer; }
+  .moveBtns{ display:flex; gap:4px; flex-wrap:wrap; }
+  .moveBtns button{ font-size:10px; padding:4px 6px; flex:1; }
+  .moveBtns button.cur{ outline:2px solid rgba(255,255,255,.4); }
+  .fixedNote{ font-size:11px; color:var(--muted); text-align:center; padding:4px 2px; border:1px dashed var(--line); border-radius:8px; }
+  .anaBox{ border-top:1px dashed var(--line); padding-top:6px; display:flex; flex-direction:column; gap:6px; }
+
+  /* ===== Add worker ===== */
+  .addbox{ margin:0 16px 24px; border:1px dashed var(--line); border-radius:12px; padding:12px; background:rgba(255,255,255,.02); }
+  .deptRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 10px; border:1px solid var(--line); border-radius:10px; margin-bottom:6px; background:var(--panel2); }
+  .deptRow .deptInfo{ min-width:0; overflow:hidden; }
+  .deptRow .deptInfo b{ font-size:13px; }
+  .deptRow button{ padding:5px 10px; font-size:12px; flex:0 0 auto; }
+  .deptRow .deptTurnoSel{ font-size:11px; padding:4px 6px; flex:0 0 auto; max-width:150px; }
+  .addgrid{ display:grid; grid-template-columns:1.6fr 1fr .8fr .8fr auto; gap:8px; align-items:end; }
+  @media (max-width: 760px){ .addgrid{ grid-template-columns:1fr; } }
+  .deptform{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; align-items:end; }
+  @media (max-width: 760px){ .deptform{ grid-template-columns:1fr; } }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field span{ font-size:11px; color:var(--muted); }
+  .status{ padding:6px 16px; font-size:12px; color:var(--muted); }
+  .status b{ color:var(--ok); }
+  /* barra stato file dati */
+  .filebanner{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 16px 0; padding:8px 12px; border-radius:10px; font-size:13px; border:1px solid var(--line); }
+  .filebanner:empty{ display:none; }
+  .filebanner.ok{ background:rgba(46,204,113,.14); border-color:rgba(46,204,113,.5); color:#bdeccd; }
+  .filebanner.warn{ background:rgba(246,194,106,.16); border-color:rgba(246,194,106,.6); color:#f6dca0; }
+  .filebanner.info{ background:rgba(255,255,255,.04); color:var(--muted); }
+  .filebanner button{ padding:5px 10px; font-size:12px; }
+  /* versione "colleghi" (copia pre-configurata): niente Cloud/Salva/Carica, niente seconda riga */
+  body.embed #cloudBtn, body.embed #saveBtn, body.embed #loadBtn, body.embed #fileInput, body.embed #fileBanner{ display:none !important; }
+  body.embed .toolbar #cloudBanner{ margin:0; flex:1; min-width:160px; }
+  .hidden{ display:none !important; }
+  /* modale cloud */
+  .modalWrap{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
+  .modal{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; width:560px; max-width:100%; max-height:90vh; overflow:auto; }
+  .modalTitle{ font-weight:800; font-size:15px; margin-bottom:4px; }
+  .modal textarea, .modal input{ width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; margin-top:4px; }
+  .modal input{ font-family:inherit; }
+  .modalBtns{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; justify-content:flex-end; }
+  .cloudbadge{ font-size:12px; }
+</style>
+</head>
+<body>
+<!-- Firebase SDK (compat) — caricato da CDN; usato solo se il cloud è configurato -->
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<header>
+  <div>
+    <h1>Presenze Divisione — Settimana</h1>
+    <div class="small muted" id="subTitle">Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.</div>
+  </div>
+  <div class="weeknav">
+    <button id="prevWk" class="ghost" title="Settimana precedente">◀</button>
+    <div class="wklabel" id="wkLabel">—</div>
+    <button id="nextWk" class="ghost" title="Settimana successiva">▶</button>
+    <button id="todayBtn" class="ghost" title="Vai a oggi">Oggi</button>
+    <button id="pdfBtn" class="ghost" title="Scarica il PDF giornaliero (oggi)">🗎 PDF</button>
+    <button id="xlsBtn" class="ghost" title="Scarica il prospetto settimanale Excel (Lun–Ven)">▦ Excel</button>
+  </div>
+  <div class="toolbar">
+    <button id="cloudBtn" title="Condivisione online (Firebase)">☁️ Cloud</button>
+    <button id="saveBtn" class="primary">Salva (JSON)</button>
+    <button id="loadBtn">Carica (JSON)</button>
+    <input id="fileInput" type="file" accept=".json,application/json" class="hidden" />
+    <button id="resetBtn" class="danger" title="Svuota le scelte della settimana">Reset settimana</button>
+  </div>
+</header>
+
+<div class="tabs" id="tabs"></div>
+<div class="subtabs" id="subtabs"></div>
+
+<div id="updBanner" class="filebanner warn" style="display:none"></div>
+<div id="cloudBanner" class="filebanner"></div>
+<div id="fileBanner" class="filebanner"></div>
+
+<!-- Modale configurazione Cloud (Firebase) -->
+<div id="cloudModal" class="modalWrap hidden">
+  <div class="modal">
+    <div class="modalTitle">Condivisione online (Firebase)</div>
+    <p class="small muted" style="margin:6px 0 10px">
+      Incolla qui la configurazione del tuo progetto Firebase (l'oggetto <code>firebaseConfig</code> che trovi nelle impostazioni del progetto). Serve un Realtime Database. Tutti i dispositivi che usano la stessa configurazione e la stessa "stanza" vedono gli stessi dati in tempo reale.
+    </p>
+    <label class="small" style="font-weight:700">Configurazione Firebase</label>
+    <textarea id="cloudCfg" rows="9" placeholder='{
+  "apiKey": "…",
+  "authDomain": "tuo-progetto.firebaseapp.com",
+  "databaseURL": "https://tuo-progetto-default-rtdb.europe-west1.firebasedatabase.app",
+  "projectId": "tuo-progetto",
+  "appId": "…"
+}'></textarea>
+    <label class="small" style="font-weight:700; margin-top:8px; display:block">Stanza (nome condiviso)</label>
+    <input id="cloudRoom" type="text" placeholder="divisione" />
+    <div id="cloudMsg" class="small" style="margin-top:8px; min-height:16px"></div>
+    <div class="modalBtns">
+      <button id="cloudConnect" class="primary">Attiva condivisione</button>
+      <button id="cloudExport" title="Genera un file già collegato da dare ai colleghi">📤 Copia per i colleghi</button>
+      <button id="cloudDisconnect" class="danger">Disattiva</button>
+      <button id="cloudClose" class="ghost">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<div class="week" id="week"></div>
+
+<div id="editorPanel" style="display:none">
+  <div class="addbox">
+    <div class="small" style="font-weight:800; margin-bottom:8px;">Reparti</div>
+    <div id="deptList"></div>
+    <div class="deptform" style="margin-top:10px">
+      <label class="field"><span>Nuovo reparto</span><input id="ndName" type="text" placeholder="Es. Magazzino" /></label>
+      <label class="field"><span>Area</span><select id="ndSection"><option value="produzione">Area Produzione</option><option value="divisione">Area Amministrativa</option></select></label>
+      <label class="field" id="ndShiftWrap"><span>A turni (Squadra A/B)</span><select id="ndShift"><option value="0">No (orario fisso)</option><option value="1">Sì</option></select></label>
+      <label class="field" id="ndHoursMWrap"><span>Orario mattina</span><input id="ndHoursM" type="text" list="turniMatt" placeholder="scrivi o scegli turno" /></label>
+      <label class="field" id="ndHoursAWrap"><span>Orario pomeriggio</span><input id="ndHoursA" type="text" list="turniPom" placeholder="scrivi o scegli turno" /></label>
+      <datalist id="turniMatt"></datalist>
+      <datalist id="turniPom"></datalist>
+      <label class="field" id="ndHoursWrap"><span>Orario</span><input id="ndHours" type="text" placeholder="8:00–16:20" /></label>
+      <label class="field"><span>Delocalizz. 🏠</span><select id="ndDeloc"><option value="1">Sì</option><option value="0">No</option></select></label>
+      <label class="field"><span>Turno G192 ⏰</span><select id="ndG192"><option value="0">No</option><option value="1">Sì</option></select></label>
+      <button id="ndAdd" class="primary">Aggiungi reparto</button>
+    </div>
+  </div>
+
+  <div class="addbox">
+    <div class="small" id="addTitle" style="font-weight:800; margin-bottom:8px;">Aggiungi operaio / operatore</div>
+    <div class="addgrid">
+      <label class="field"><span>Nome e cognome</span><input id="addName" type="text" placeholder="Mario Rossi" /></label>
+      <label class="field"><span>Reparto</span><select id="addDept"></select></label>
+      <label class="field"><span>Squadra</span><select id="addTeam"><option value="A">A</option><option value="B">B</option></select></label>
+      <label class="field"><span>Leader</span><select id="addLeader"><option value="0">No</option><option value="1">Sì</option></select></label>
+      <button id="addBtn" class="primary">Aggiungi</button>
+    </div>
+  </div>
+
+  <div class="addbox">
+    <div class="small" style="font-weight:800; margin-bottom:8px;">Giorni festivi</div>
+    <div class="small muted" style="margin-bottom:8px">Imposta in automatico le festività nazionali italiane e il patrono di Roma (29 giugno). Puoi comunque attivare/disattivare il singolo giorno dal calendario (pulsante “Festivo” sotto la data).</div>
+    <button id="holRome" class="primary">🎄 Imposta festivi (Italia + Roma)</button>
+  </div>
+</div>
+
+<div class="status">Stato: <b id="jsStatus">—</b> <span id="ioStatus" class="muted"></span> <span id="fileLink" class="muted"></span></div>
+
+<!-- Anagrafica predefinita -->
+<script>
+window.HARD_WORKERS = [
+  { id:"stefano_ancillai",     name:"Stefano Ancillai",     deptId:"N", baseTeam:"A", isLeader:true, isChief:true },
+  { id:"floriana_de_rosa",     name:"Floriana De Rosa",     deptId:"N", baseTeam:"A", isLeader:false },
+  { id:"annamaria_biscetti",   name:"Annamaria Biscetti",   deptId:"N", baseTeam:"A", isLeader:false },
+  { id:"claudio_piccialuti",   name:"Claudio Piccialuti",   deptId:"P", baseTeam:"B", isLeader:false },
+  { id:"davide_forcellini",    name:"Davide Forcellini",    deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"carlo_cubito",         name:"Carlo Cubito",         deptId:"P", baseTeam:"B", isLeader:false },
+  { id:"fabrizio_lanzi",       name:"Fabrizio Lanzi",       deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"simone_sgalippa",      name:"Simone Sgalippa",      deptId:"P", baseTeam:"A", isLeader:false },
+  { id:"angelo_pannisco",      name:"Angelo Pannisco",      deptId:"P", baseTeam:"B", isLeader:false },
+  { id:"marco_fontana",        name:"Marco Fontana",        deptId:"S", baseTeam:"A", isLeader:true  },
+  { id:"claudio_picchetta",    name:"Claudio Picchetta",    deptId:"S", baseTeam:"A", isLeader:false },
+  { id:"franco_giambenedetti", name:"Franco Giambenedetti", deptId:"S", baseTeam:"B", isLeader:true  },
+  { id:"nicola_cinquepalmi",   name:"Nicola Cinquepalmi",   deptId:"S", baseTeam:"B", isLeader:false },
+  { id:"angelo_panunzi",       name:"Angelo Panunzi",       deptId:"S", baseTeam:"A", isLeader:true  },
+  { id:"luca_ticconi",         name:"Luca Ticconi",         deptId:"S", baseTeam:"A", isLeader:false },
+  { id:"roberto_tomba",        name:"Roberto Tomba",        deptId:"S", baseTeam:"B", isLeader:true  },
+  { id:"vincenzo_saranzotti",  name:"Vincenzo Saranzotti",  deptId:"S", baseTeam:"B", isLeader:false }
+];
+</script>
+
+<script>
+(() => {
+"use strict";
+
+/* ====== Costanti ====== */
+/* Due reparti: Area Prestampa (ex Prestampa + Revisione) e Reparto Stampa (ex Stampa + Allestimento) */
+/* Aree: Senza Turno (orario fisso 8-16:20), Area Prestampa, Reparto Stampa */
+/* Reparti predefiniti. allowDeloc=mostra 🏠 · allowG192=mostra ⏰ · fixedMorning=orario fisso mattina */
+const DEFAULT_DEPTS = [
+  { id:"N", name:"Area Senza Turno", section:"produzione", hours:"8:00–16:20", fixedMorning:true, allowDeloc:true, allowG192:false, builtin:true },
+  { id:"P", name:"Area Prestampa", section:"produzione", shifted:true, hoursM:"7:00–15:10", hoursA:"12:20–20:30", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"S", name:"Reparto Stampa", section:"produzione", shifted:true, hoursM:"7:00–15:10", hoursA:"11:20–19:30", allowDeloc:true, allowG192:true, builtin:true },
+  // Resto della Divisione: orario fisso 8:00–16:20, nessun turno
+  { id:"AM", name:"Area Amministrativa",   section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"TE", name:"Area Tecnica",          section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"GR", name:"Progettazione Grafica", section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
+  { id:"SP", name:"Spedizioni",            section:"divisione", hours:"8:00–16:20", allowDeloc:true, allowG192:false, builtin:true },
+];
+let DEPTS = DEFAULT_DEPTS.map(d=>({...d}));
+function normDept(d){
+  return {
+    id:String(d.id||uuid()),
+    name:normName(d.name||"")||"Reparto",
+    section:(d.section==="divisione")?"divisione":"produzione",
+    shifted:!!d.shifted,                 // a turni (Squadra A/B mattina/pomeriggio)
+    hours:d.hours||"",                   // orario fisso (reparti non a turni)
+    hoursM:d.hoursM||"",                 // orario mattina (reparti a turni)
+    hoursA:d.hoursA||"",                 // orario pomeriggio (reparti a turni)
+    fixedMorning:!!d.fixedMorning,
+    allowDeloc:d.allowDeloc!==false,
+    allowG192:!!d.allowG192,
+    defaultTurno:(turnoByCode(d.defaultTurno)?d.defaultTurno:""),   // turno predefinito del reparto/area (impostabile nell'Editor)
+    builtin:!!d.builtin
+  };
+}
+function setDepts(list){ DEPTS = (Array.isArray(list)&&list.length) ? list.map(normDept) : DEFAULT_DEPTS.map(d=>({...d})); }
+function deptAllowsDeloc(worker){ const d=deptById(worker&&worker.deptId); return !d || d.allowDeloc!==false; }
+function deptAllowsG192(worker){ const d=deptById(worker&&worker.deptId); return !!(d&&d.allowG192); }
+/* Schede (tab) della pagina */
+const SECTIONS = [
+  { id:"produzione", label:"Area Produzione" },
+  { id:"divisione",  label:"Area Amministrativa" },
+];
+function sectionOf(deptId){ return (DEPTS.find(d=>d.id===deptId)?.section) || "produzione"; }
+function mapDept(old){
+  const raw=String(old||"");
+  if(DEPTS.some(d=>d.id===raw)) return raw;        // id già valido (anche reparti personalizzati)
+  const o=raw.toUpperCase();
+  if(DEPTS.some(d=>d.id===o)) return o;            // legacy in maiuscolo (N,P,S,AM,…)
+  if(o==="B"||o==="C") return "S";                 // legacy: Allestimento -> Reparto Stampa
+  return "P";                                      // Prestampa, Revisione, default -> Area Prestampa
+}
+/* Operai rimossi definitivamente dalla compagine (filtrati anche dai dati salvati) */
+const REMOVED_IDS = new Set(["roberto_benvenuti","leonardo_forti"]);
+/* Operai dell'Area Senza Turno (sempre mattina, nessun cambio turno) */
+const SENZA_TURNO_IDS = new Set(["stefano_ancillai","annamaria_biscetti","floriana_de_rosa"]);
+function isNoShift(worker){ const d=deptById(worker&&worker.deptId); return !!(d&&d.fixedMorning); }
+const STATUS = [
+  { id:"PRESENTE",              label:"Presente" },
+  { id:"TELELAVORO",            label:"Telelavoro" },
+  { id:"DELOCALIZZATO",         label:"Delocalizzato" },
+  { id:"ENTRATA_RITARDATA",     label:"Entrata ritardata" },
+  { id:"USCITA_ANTICIPATA",     label:"Uscita anticipata" },
+  { id:"MALATTIA",              label:"Malattia" },
+  { id:"LEGGE_104",             label:"Legge 104" },
+  { id:"CONGEDO_ORDINARIO",     label:"Congedo ordinario" },
+  { id:"CONGEDO_SETTIMANALE",   label:"Congedo settimanale" },
+  { id:"CONGEDO_GIORNALIERO",   label:"Congedo giornaliero" },
+  { id:"CONGEDO_STRAORDINARIO", label:"Congedo straordinario" },
+];
+const ABSENT = new Set(["MALATTIA","LEGGE_104","CONGEDO_ORDINARIO","CONGEDO_SETTIMANALE","CONGEDO_GIORNALIERO","CONGEDO_STRAORDINARIO"]);
+const SHIFTS = [
+  { id:"morning",   label:"Mattina",    split:true  },
+  { id:"afternoon", label:"Pomeriggio", split:true  },
+  { id:"absent",    label:"Assenze",    split:false },
+];
+/* Sabato e Domenica: turno unico, due zone (default tutti a casa) */
+const SHIFTS_WE = [
+  { id:"work", label:"Al lavoro", split:false },
+  { id:"home", label:"A casa",    split:false, dim:true },
+];
+/* Resto Divisione (feriale): nessun turno, solo presenza/assenza */
+const SHIFTS_DIV = [
+  { id:"morning",   label:"Mattina",    split:false, group:"div", optional:true },   // solo se qualcuno ha un turno di mattina
+  { id:"present",   label:"Al lavoro (8:00–16:20)", split:false, group:"div" },
+  { id:"afternoon", label:"Pomeriggio", split:false, group:"div", optional:true },   // es. chi ha il turno G032
+  { id:"absent",    label:"Assenze", split:false },
+];
+function isWeekend(date){ const d=date.getDay(); return d===0 || d===6; }
+function shiftsFor(date, section){
+  if(isWeekend(date)) return SHIFTS_WE;
+  return (section||activeSection)==="divisione" ? SHIFTS_DIV : SHIFTS;
+}
+const DOW = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
+const MON = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+/* Versione dell'app (AAAAMMGG): incrementare a ogni release. Serve per avvisare chi usa una copia vecchia. */
+const APP_VERSION = 20260924;
+
+const STORE_WORKERS = "presenze_divisione_workers_v3";
+const STORE_WEEK    = "presenze_divisione_week_v3";
+const STORE_DEPTS   = "presenze_divisione_depts_v1";
+const STORE_HOLIDAYS= "presenze_divisione_holidays_v1";
+const STORE_CONFIRMS= "presenze_divisione_confirms_v1";
+
+/* ====== Stato ====== */
+let data = { workers:[], week:{}, holidays:{}, confirms:{} };
+function isHoliday(iso){ return !!(data.holidays && data.holidays[iso]); }
+/* Conferme presenze per giorno/area: data.confirms[iso][deptId]=true */
+function isConfirmed(iso,deptId){ return !!(data.confirms && data.confirms[iso] && data.confirms[iso][deptId]); }
+function toggleConfirm(iso,deptId){
+  if(!data.confirms) data.confirms={};
+  if(!data.confirms[iso]) data.confirms[iso]={};
+  if(data.confirms[iso][deptId]) delete data.confirms[iso][deptId]; else data.confirms[iso][deptId]=true;
+  if(!Object.keys(data.confirms[iso]).length) delete data.confirms[iso];
+  saveConfirms(); render();
+}
+function toggleHoliday(iso){ if(!data.holidays) data.holidays={}; if(data.holidays[iso]) delete data.holidays[iso]; else data.holidays[iso]=true; saveHolidays(); render(); }
+/* Pasqua (algoritmo di Gauss) e festività italiane + patrono di Roma (San Pietro e Paolo, 29 giugno) */
+function easterDate(year){
+  const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+  return new Date(year,mo-1,da);
+}
+function romeHolidays(year){
+  const list=["01-01","01-06","04-25","05-01","06-02","06-29","08-15","11-01","12-08","12-25","12-26"].map(s=>year+"-"+s);
+  const e=easterDate(year), em=new Date(e); em.setDate(e.getDate()+1);
+  list.push(toISO(e), toISO(em));   // Pasqua e Lunedì dell'Angelo
+  return list;
+}
+function autoSetRomeHolidays(){
+  if(!data.holidays) data.holidays={};
+  const y0=new Date().getFullYear();
+  for(let y=y0-1;y<=y0+2;y++) for(const iso of romeHolidays(y)) data.holidays[iso]=true;
+  saveHolidays(); render();
+  ioMsg("Festivi (Italia + Roma) impostati per "+(y0-1)+"–"+(y0+2));
+}
+window.data = data;
+let anchorISO = toISO(new Date());   // un giorno qualsiasi della settimana mostrata
+let expandedKey = null;              // `${workerId}__${dateISO}`
+let dragId = null;
+let isEmbed = false;                  // copia "colleghi": giornate passate in sola lettura
+function isPastLocked(date){ return isEmbed && toISO(date) < toISO(new Date()); }
+let weekendCollapsed = false;        // colonna Sab/Dom collassata
+function setWeekendCollapsed(v){ weekendCollapsed=!!v; try{ localStorage.setItem("presenze_weekend_collapsed", v?"1":"0"); }catch{} render(); }
+let activeSection = "produzione";    // scheda attiva: "produzione" | "divisione"
+try{ const s=localStorage.getItem("presenze_section"); if(s==="produzione"||s==="divisione") activeSection=s; }catch{}
+function setSection(s){ if(s!==activeSection){ activeSection=s; try{ localStorage.setItem("presenze_section",s); }catch{} expandedKey=null; fillAddMenus(); render(); } }
+const deptFilters = { produzione:new Set(), divisione:new Set() };   // filtri reparto/area per scheda (solo vista)
+
+/* ====== Util ====== */
+const $ = id => document.getElementById(id);
+function pad(n){ return String(n).padStart(2,"0"); }
+function toISO(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function fromISO(s){ return new Date(s + "T00:00:00"); }
+function uuid(){ return "id_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16); }
+function normName(s){ return String(s ?? "").trim().replace(/\s+/g," "); }
+function clamp(s,n){ const t=String(s ?? ""); return t.length>n ? t.slice(0,n) : t; }
+function deptById(id){ return DEPTS.find(d => d.id === id); }
+function statusLabel(id){ return (STATUS.find(s => s.id === id)?.label) || id; }
+/* Versione abbreviata dello stato, da mostrare in linea dopo il nome */
+const STATUS_SHORT = {
+  TELELAVORO:"Telelavoro",
+  DELOCALIZZATO:"Deloc.",
+  ENTRATA_RITARDATA:"Entr. rit.",
+  USCITA_ANTICIPATA:"Usc. ant.",
+  MALATTIA:"Malattia",
+  LEGGE_104:"L. 104",
+  CONGEDO_ORDINARIO:"Cong. ord.",
+  CONGEDO_SETTIMANALE:"Cong. sett.",
+  CONGEDO_GIORNALIERO:"Cong. giorn.",
+  CONGEDO_STRAORDINARIO:"Cong. str.",
+};
+function statusShort(id){ return STATUS_SHORT[id] || statusLabel(id); }
+function isAbsentStatus(st){ return ABSENT.has(st); }
+/* Conteggio delocalizzazioni nel mese (con cache azzerata a ogni render) */
+let _delocCache=null;
+function isDelocRec(rec){ return !!(rec && (rec.deloc || rec.status==="DELOCALIZZATO")); }
+function delocCountMonth(wid, ym){
+  if(!_delocCache) _delocCache={};
+  if(!_delocCache[ym]){
+    const m={};
+    for(const wk in data.week){
+      const days=data.week[wk] && data.week[wk].days; if(!days) continue;
+      for(const iso in days){ if(iso.slice(0,7)!==ym) continue; const dd=days[iso]; for(const id in dd){ if(isDelocRec(dd[id])) m[id]=(m[id]||0)+1; } }
+    }
+    _delocCache[ym]=m;
+  }
+  return _delocCache[ym][wid]||0;
+}
+
+function mondayOf(d){ const x=new Date(d); const k=(x.getDay()+6)%7; x.setDate(x.getDate()-k); x.setHours(0,0,0,0); return x; }
+function weekDates(d){ const m=mondayOf(d); return Array.from({length:7},(_,i)=>{ const x=new Date(m); x.setDate(m.getDate()+i); return x; }); }
+function getISOWeekKey(date){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  const dn=d.getUTCDay()||7; d.setUTCDate(d.getUTCDate()+4-dn);
+  const ys=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const wn=Math.ceil((((d-ys)/86400000)+1)/7);
+  return `${d.getUTCFullYear()}-W${pad(wn)}`;
+}
+function getISOWeekNumber(date){ return parseInt(getISOWeekKey(date).split("W")[1],10); }
+function isEvenWeek(date){ return (getISOWeekNumber(date)%2)===0; }
+/* Alternanza: settimana pari -> mattina A, dispari -> mattina B */
+function isMorningTeam(team,date){ return team === (isEvenWeek(date) ? "A" : "B"); }
+/* Turno automatico secondo l'alternanza squadre (settimana pari -> mattina A, dispari -> B) */
+function autoWorkShift(worker,date){
+  if(isNoShift(worker)) return "morning";          // Area Senza Turno: sempre mattina
+  return isMorningTeam(worker.baseTeam,date) ? "morning" : "afternoon";
+}
+function isG192(worker,rec){ return deptAllowsG192(worker) && !!(rec&&rec.g192); }
+/* Orari per reparto e turno */
+function hoursFor(deptId,shiftId){
+  if(deptId==="N") return "8:00–16:20";
+  if(deptId==="P") return shiftId==="afternoon" ? "12:20–20:30" : "7:00–15:10";
+  if(deptId==="S") return shiftId==="afternoon" ? "11:20–19:30" : "7:00–15:10";
+  const d=deptById(deptId); if(!d) return "";
+  if(d.shifted) return shiftId==="afternoon" ? (d.hoursA||"") : (d.hoursM||"");
+  return d.hours||"";
+}
+const G192_HOURS="6:30–14:40";
+/* Catalogo turni: codice → orario e fascia (mattina/pomeriggio) */
+const TURNI = [
+  { code:"G192", hours:"6:30–14:40",  slot:"morning"   },
+  { code:"G190", hours:"7:00–15:10",  slot:"morning"   },
+  { code:"G021", hours:"11:20–19:30", slot:"afternoon" },
+  { code:"G032", hours:"9:50–18:00",  slot:"afternoon" },   // Spedizioni (pomeriggio, senza alternanza)
+  { code:"G191", hours:"12:20–20:30", slot:"afternoon" },
+];
+function turnoByCode(c){ return TURNI.find(t=>t.code===c); }
+function turnoInfo(c){ return c==="NONE" ? {code:"NONE",hours:"8:00–16:20",slot:"morning"} : turnoByCode(c); }
+/* Popola un <select> di turni: automatico, Nessuno (8-16:20), poi gruppo Mattina, poi gruppo Pomeriggio */
+function fillTurnoSelect(sel,current,autoLabel){
+  sel.innerHTML="";
+  const oa=document.createElement("option"); oa.value=""; oa.textContent=autoLabel; sel.appendChild(oa);
+  const on=document.createElement("option"); on.value="NONE"; on.textContent="Nessuno (8:00–16:20)"; if((current||"")==="NONE") on.selected=true; sel.appendChild(on);
+  const gm=document.createElement("optgroup"); gm.label="── Mattina ──";
+  const ga=document.createElement("optgroup"); ga.label="── Pomeriggio ──";
+  for(const t of TURNI){ const o=document.createElement("option"); o.value=t.code; o.textContent=t.code+" ("+t.hours+")"; if((current||"")===t.code) o.selected=true; (t.slot==="morning"?gm:ga).appendChild(o); }
+  sel.appendChild(gm); sel.appendChild(ga);
+}
+/* Codici turno per orario (usati nel prospetto) */
+const TURNO_CODE = { "7:00-15:10":"G190", "12:20-20:30":"G191", "11:20-19:30":"G021", "6:30-14:40":"G192", "9:50-18:00":"G032" };
+function turnoCode(hours){ return TURNO_CODE[String(hours||"").replace(/[–—-]/g,"-").replace(/\s+/g,"")] || ""; }
+/* Turno "forzato" di una persona: override manuale (rec.turno), G192, oppure il turno predefinito del reparto */
+function effTurnoOverride(worker,rec){
+  if(rec && rec.turno && (rec.turno==="NONE"||turnoByCode(rec.turno))) return rec.turno;
+  if(isG192(worker,rec)) return "G192";
+  const d=deptById(worker&&worker.deptId);
+  if(d && d.defaultTurno && turnoByCode(d.defaultTurno)) return d.defaultTurno;
+  return null;
+}
+/* Turno effettivo: manuale (rec.shift) ha priorità, altrimenti automatico */
+function effShift(worker,rec,date){
+  if(isWeekend(date)) return rec.shift==="work" ? "work" : "home";   // default: a casa
+  const absent=isAbsentStatus(rec.status||"PRESENTE");
+  if(sectionOf(worker.deptId)==="divisione"){
+    if(absent) return "absent";
+    const ovd=effTurnoOverride(worker,rec);
+    if(ovd==="NONE") return "present";                               // "Nessuno" in Amministrativa = presenza normale 8-16:20
+    return ovd ? turnoInfo(ovd).slot : "present";                    // area amministrativa: presenza, o turno se attivato
+  }
+  if(absent) return "absent";
+  const ov=effTurnoOverride(worker,rec);
+  if(ov) return turnoInfo(ov).slot;                                  // turno forzato/G192/predefinito/Nessuno → sua fascia
+  if(isNoShift(worker)) return "morning";
+  if(rec.shift==="morning"||rec.shift==="afternoon") return rec.shift;
+  return autoWorkShift(worker,date);
+}
+/* Raggruppa gli item di un bucket. I turni "forzati" sono etichettati per Area · Turno · Orario
+   (l'orario/codice viene aggiunto in fase di render come per i reparti di produzione). */
+function groupByTurnoThenDept(items, section, shiftId){
+  const groups=[], ovGroups={}, byDept={};
+  const nh = h => String(h||"").replace(/[–—-]/g,"-").replace(/\s+/g,"");
+  for(const x of items){
+    let ov=effTurnoOverride(x.worker,x.rec);
+    if(ov==="NONE" && section==="divisione") ov=null;   // in Amministrativa "Nessuno" = normale (8-16:20), stessa colonna del reparto
+    // se il turno forzato coincide con l'orario normale del reparto in questa fascia, non separarlo (stesso turno = stesso gruppo)
+    if(ov && nh(turnoInfo(ov).hours)===nh(hoursFor(x.worker.deptId, shiftId))) ov=null;
+    if(ov){ const k=x.worker.deptId+"|"+ov; (ovGroups[k]=ovGroups[k]||{deptId:x.worker.deptId,code:ov,items:[]}).items.push(x); }
+    else { (byDept[x.worker.deptId]=byDept[x.worker.deptId]||[]).push(x); }
+  }
+  // gruppi turno forzato: ordinati per turno (incl. "Nessuno"), poi per reparto — etichetta = nome area (l'orario compare nel render)
+  for(const code of [...TURNI.map(t=>t.code),"NONE"]){
+    for(const d of DEPTS){
+      const g=ovGroups[d.id+"|"+code];
+      if(g && g.items.length) groups.push({ label:d.name, hours:turnoInfo(code).hours, items:g.items });
+    }
+  }
+  // gruppi normali per reparto
+  for(const d of DEPTS){
+    if(d.section!==section) continue;
+    const g=byDept[d.id]; if(!g||!g.length) continue;
+    const hours = section==="divisione" ? (d.hours||"8:00–16:20") : hoursFor(d.id,shiftId);
+    groups.push({ label:d.name, hours, items:g });
+  }
+  return groups;
+}
+function splitGroups(items,shiftId){ return groupByTurnoThenDept(items,"produzione",shiftId); }
+function divGroups(items){ return groupByTurnoThenDept(items,"divisione","present"); }
+
+/* ====== Storage (autosave) ====== */
+function loadStore(key){ try{ const r=localStorage.getItem(key); return r ? JSON.parse(r) : null; }catch{ return null; } }
+function saveWorkers(){ try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); }catch{} scheduleFileWrite(); cloudPushWorkers(); }
+function saveWeek(){ try{ localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); }catch{} scheduleFileWrite(); }
+function saveDepts(){ try{ localStorage.setItem(STORE_DEPTS, JSON.stringify(DEPTS)); }catch{} scheduleFileWrite(); cloudPushDepts(); }
+function saveHolidays(){ try{ localStorage.setItem(STORE_HOLIDAYS, JSON.stringify(data.holidays||{})); }catch{} scheduleFileWrite(); cloudPushHolidays(); }
+function saveConfirms(){ try{ localStorage.setItem(STORE_CONFIRMS, JSON.stringify(data.confirms||{})); }catch{} scheduleFileWrite(); cloudPushConfirms(); }
+
+/* ====== Day record ====== */
+function ensureDay(weekKey,iso){
+  if(!data.week[weekKey]) data.week[weekKey] = { days:{} };
+  if(!data.week[weekKey].days[iso]) data.week[weekKey].days[iso] = {};
+}
+function getRec(weekKey,iso,wid){
+  ensureDay(weekKey,iso);
+  return data.week[weekKey].days[iso][wid] || { status:"PRESENTE", deloc:false, g192:false, note:"", shift:null };
+}
+function setRec(weekKey,iso,wid,patch){
+  ensureDay(weekKey,iso);
+  const cur = getRec(weekKey,iso,wid);
+  data.week[weekKey].days[iso][wid] = { ...cur, ...patch };
+  saveWeek();
+  cloudPushRecord(weekKey,iso,wid);
+}
+
+/* ====== JSON import/export ====== */
+function ioMsg(m){ const e=$("ioStatus"); if(e) e.textContent = m ? ("· " + m) : ""; }
+function downloadJson(filename,obj){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },200);
+}
+function normWorker(w){
+  return {
+    id:String(w.id||uuid()), name:normName(w.name||""),
+    deptId:mapDept(w.deptId),
+    baseTeam:(String(w.baseTeam||"A").toUpperCase()==="B")?"B":"A",
+    isLeader:!!w.isLeader,
+    isChief:!!w.isChief
+  };
+}
+function buildPayload(){
+  return { version:3, exportedAt:new Date().toISOString(), depts:DEPTS, workers:data.workers.map(normWorker), week:data.week||{}, holidays:data.holidays||{}, confirms:data.confirms||{} };
+}
+function exportJson(){
+  downloadJson("presenze_data.json", buildPayload());
+  ioMsg("salvato presenze_data.json");
+}
+function importJsonText(text){
+  let obj;
+  try{ obj = JSON.parse(text); }
+  catch(e){ throw new Error("JSON non valido: " + (e?.message||e)); }
+  if(!obj || typeof obj!=="object" || !Array.isArray(obj.workers)) throw new Error("File non valido (manca 'workers').");
+  if(Array.isArray(obj.depts) && obj.depts.length){ setDepts(obj.depts); try{ localStorage.setItem(STORE_DEPTS, JSON.stringify(DEPTS)); }catch{} }
+  data.workers = obj.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
+  for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
+  data.week = (obj.week && typeof obj.week==="object") ? obj.week : {};
+  data.holidays = (obj.holidays && typeof obj.holidays==="object") ? obj.holidays : {};
+  data.confirms = (obj.confirms && typeof obj.confirms==="object") ? obj.confirms : {};
+  saveWorkers(); saveWeek(); saveDepts(); saveHolidays(); saveConfirms(); if(cloudSeeded) cloudPushAll(); render();
+}
+async function importJson(file){ importJsonText(await file.text()); ioMsg("dati caricati"); }
+
+/* ====== File collegato nella cartella (File System Access API) ====== */
+const FSA = (typeof window!=="undefined") && ("showSaveFilePicker" in window);
+let fileHandle=null, pendingHandle=null, fsTimer=null, fsPending=false, fsWriting=false;
+function renderFileBanner(){
+  const b=$("fileBanner"); if(!b) return;
+  b.className="filebanner"; b.innerHTML="";
+  const mkBtn=(txt,fn)=>{ const x=document.createElement("button"); x.type="button"; x.className="primary"; x.textContent=txt; x.onclick=fn; return x; };
+  if(!FSA){
+    b.classList.add("info");
+    b.textContent="Salvataggio automatico nel browser attivo. Il salvataggio su file richiede Chrome o Edge.";
+    return;
+  }
+  if(fileHandle){
+    b.classList.add("ok");
+    b.appendChild(document.createTextNode("✓ Salvataggio automatico ATTIVO su file: "+fileHandle.name+"  "));
+    b.appendChild(mkBtn("Scollega", fsaUnlink));
+    return;
+  }
+  if(pendingHandle){
+    b.classList.add("warn");
+    b.appendChild(document.createTextNode("⚠ File dati \""+pendingHandle.name+"\" presente. Clic per riattivare il salvataggio automatico:  "));
+    b.appendChild(mkBtn("Riattiva salvataggio", reactivateFile));
+    return;
+  }
+  b.classList.add("info");
+  b.appendChild(document.createTextNode("Vuoi salvare automaticamente in un file nella cartella? "));
+  b.appendChild(mkBtn("Collega file dati", fsaLinkSave));
+  b.appendChild(document.createTextNode(" oppure "));
+  b.appendChild(mkBtn("Apri file esistente", fsaLinkOpen));
+}
+async function reactivateFile(){
+  if(!pendingHandle) return;
+  try{
+    if((await pendingHandle.requestPermission({mode:"readwrite"}))==="granted"){
+      fileHandle=pendingHandle; pendingHandle=null;
+      try{ const f=await fileHandle.getFile(); if(f.size>0) importJsonText(await f.text()); }catch{}
+      setLinkStatus("file collegato: "+fileHandle.name+" — salvataggio automatico");
+      renderFileBanner();
+    }
+  }catch(e){ const m=fsaError(e); if(m) setLinkStatus("errore: "+m); }
+}
+async function fsaUnlink(){ fileHandle=null; pendingHandle=null; try{ await idbDel("dataFile"); }catch{} setLinkStatus("file scollegato"); renderFileBanner(); }
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open("presenze_fs",1); r.onupgradeneeded=()=>r.result.createObjectStore("h"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbSet(k,v){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("h","readwrite"); t.objectStore("h").put(v,k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
+async function idbGet(k){ const db=await idbOpen(); return new Promise((res,rej)=>{ const t=db.transaction("h","readonly"); const q=t.objectStore("h").get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function idbDel(k){ const db=await idbOpen(); return new Promise((res)=>{ const t=db.transaction("h","readwrite"); t.objectStore("h").delete(k); t.oncomplete=()=>res(); }); }
+function setLinkStatus(text,onClick){
+  const el=$("fileLink"); if(!el) return;
+  el.textContent = text ? ("· "+text) : "";
+  el.style.cursor = onClick?"pointer":"default";
+  el.style.textDecoration = onClick?"underline":"none";
+  el.onclick = onClick||null;
+}
+function scheduleFileWrite(){ if(!fileHandle) return; fsPending=true; clearTimeout(fsTimer); fsTimer=setTimeout(flushFileWrite,600); }
+async function flushFileWrite(){
+  if(!fileHandle||fsWriting||!fsPending) return;
+  fsWriting=true; fsPending=false;
+  try{
+    if((await fileHandle.queryPermission({mode:"readwrite"}))!=="granted"){
+      pendingHandle=fileHandle; fileHandle=null; fsWriting=false; renderFileBanner(); return;
+    }
+    const w=await fileHandle.createWritable();
+    await w.write(JSON.stringify(buildPayload(),null,2));
+    await w.close();
+    setLinkStatus("file: "+fileHandle.name+" (salvato ✓)");
+  }catch(e){ setLinkStatus("errore scrittura file"); }
+  fsWriting=false;
+  if(fsPending) flushFileWrite();
+}
+function fsaError(e){
+  if(e?.name==="AbortError") return null;
+  if(e?.name==="SecurityError") return "il browser blocca i file in locale: apri l'app via http o GitHub Pages";
+  return (e?.message||String(e));
+}
+async function fsaLinkSave(){
+  try{
+    const h=await window.showSaveFilePicker({ suggestedName:"presenze_data.json", types:[{description:"Dati Presenze (JSON)",accept:{"application/json":[".json"]}}] });
+    fileHandle=h; pendingHandle=null; await idbSet("dataFile",h);
+    fsPending=true; await flushFileWrite();
+    setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
+  }catch(e){ const m=fsaError(e); if(m) setLinkStatus("errore: "+m); }
+  renderFileBanner();
+}
+async function fsaLinkOpen(){
+  try{
+    const [h]=await window.showOpenFilePicker({ types:[{description:"Dati Presenze (JSON)",accept:{"application/json":[".json"]}}] });
+    let p=await h.queryPermission({mode:"readwrite"});
+    if(p!=="granted") p=await h.requestPermission({mode:"readwrite"});
+    const f=await h.getFile();
+    if(f.size>0) importJsonText(await f.text());
+    fileHandle=h; pendingHandle=null; await idbSet("dataFile",h);
+    setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
+    ioMsg("dati caricati dal file");
+  }catch(e){ const m=fsaError(e); if(m){ setLinkStatus("errore: "+m); alert("Errore: "+m); } }
+  renderFileBanner();
+}
+async function fsaReconnect(){
+  if(!FSA){ renderFileBanner(); return; }
+  let h; try{ h=await idbGet("dataFile"); }catch{ renderFileBanner(); return; }
+  if(!h){ renderFileBanner(); return; }
+  try{
+    if((await h.queryPermission({mode:"readwrite"}))==="granted"){
+      fileHandle=h;
+      try{ const f=await h.getFile(); if(f.size>0) importJsonText(await f.text()); }catch{}
+      setLinkStatus("file collegato: "+h.name+" — salvataggio automatico");
+    }else{
+      pendingHandle=h;   // serve un clic per riattivare (lo mostra la barra in alto)
+    }
+  }catch(e){}
+  renderFileBanner();
+}
+
+/* ====== Download helper ====== */
+function downloadBlob(filename,data,type){
+  const blob=new Blob([data],{type});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },200);
+}
+
+/* ====== Etichette comuni a PDF / Excel ====== */
+const GIORNI_IT=["Domenica","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato"];
+const MESI_IT=["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+function dateLabelIT(date){ return `${GIORNI_IT[date.getDay()]} ${date.getDate()} ${MESI_IT[date.getMonth()]} ${date.getFullYear()}`; }
+function isDeloc(rec,st){ return !!rec.deloc || st==="DELOCALIZZATO" || st==="TELELAVORO"; }
+/* descrizione collocazione di un operaio in un giorno */
+function placementText(worker,rec,date){
+  const st=rec.status||"PRESENTE";
+  const sh=effShift(worker,rec,date);
+  let base;
+  if(sh==="absent") base=statusLabel(st);
+  else if(sh==="present") base="Al lavoro (8:00–16:20)";
+  else if(sh==="home") base="A casa";
+  else if(sh==="work") base="Al lavoro";
+  else if(sh==="morning"){
+    if(isNoShift(worker)) base="Mattina (8:00–16:20)";
+    else if(isG192(worker,rec)) base="Turno G192 ("+G192_HOURS+")";
+    else base="Mattina ("+hoursFor(worker.deptId,"morning")+")";
+  }
+  else if(sh==="afternoon") base="Pomeriggio ("+hoursFor(worker.deptId,"afternoon")+")";
+  else base=sh;
+  const extra=[];
+  if(sh!=="absent" && isDeloc(rec,st)) extra.push("Deloc");
+  if(sh!=="absent" && st!=="PRESENTE" && !isAbsentStatus(st) && st!=="DELOCALIZZATO" && st!=="TELELAVORO") extra.push(statusLabel(st));
+  if((rec.note||"").trim()) extra.push(rec.note.trim());
+  return base + (extra.length?(" — "+extra.join(", ")):"");
+}
+
+/* ====== PDF giornaliero (testo, A4) ====== */
+function pdfLatin1(s){
+  let t=String(s||"");
+  try{ t=t.normalize("NFKD").replace(/[̀-ͯ]/g,""); }catch{}
+  t=t.replace(/’|‘/g,"'").replace(/–|—/g,"-").replace(/…/g,"...").replace(/[·•]/g,"-");
+  let out=""; for(let i=0;i<t.length;i++){ const c=t.charCodeAt(i); out+=(c>255)?"":t[i]; }
+  return out;
+}
+function pdfEsc(s){ return pdfLatin1(s).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)"); }
+function pdfText(cmd,x,yTop,size,bold,text){
+  const y=(841.89-yTop).toFixed(2);
+  cmd.push("BT",`/${bold?"F2":"F1"} ${size} Tf`,`${x.toFixed(2)} ${y} Td`,`(${pdfEsc(text)}) Tj`,"ET");
+}
+function buildPdf(content){
+  const A4W=595.28, A4H=841.89;
+  const bytes=new TextEncoder().encode(content);
+  const objs=[
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A4W} ${A4H}] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>`,
+    `<< /Length ${bytes.length} >>\nstream\n`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"
+  ];
+  let pdf="%PDF-1.4\n"; const off=[0];
+  const addSimple=(i,b)=>{ off[i]=pdf.length; pdf+=`${i} 0 obj\n${b}\nendobj\n`; };
+  const addStream=(i,h,b)=>{ off[i]=pdf.length; pdf+=`${i} 0 obj\n${h}`; let s=""; for(let k=0;k<b.length;k++) s+=String.fromCharCode(b[k]); pdf+=s+"\nendstream\nendobj\n"; };
+  addSimple(1,objs[0]); addSimple(2,objs[1]); addSimple(3,objs[2]); addStream(4,objs[3],bytes); addSimple(5,objs[4]); addSimple(6,objs[5]);
+  const xref=pdf.length;
+  pdf+="xref\n0 7\n0000000000 65535 f \n";
+  for(let i=1;i<=6;i++) pdf+=String(off[i]).padStart(10,"0")+" 00000 n \n";
+  pdf+=`trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  const out=new Uint8Array(pdf.length);
+  for(let i=0;i<pdf.length;i++) out[i]=pdf.charCodeAt(i)&0xff;
+  return out;
+}
+function pdfNameLine(it){
+  const w=it.worker;
+  let s=w.name;
+  if(w.isChief) s="* "+s+" (Capo Officina)";
+  else if(w.isLeader) s="* "+s;
+  const desc=placementText(w,it.rec,it._date);
+  return s + "  —  " + desc;
+}
+/* --- primitive di disegno PDF (rettangoli, righe, testo colorato/centrato) --- */
+function pdfRect(cmd,x,yTop,w,h,fill,stroke){
+  const y=(841.89-(yTop+h));
+  let s="";
+  if(fill) s+=`${fill[0]} ${fill[1]} ${fill[2]} rg `;
+  s+="0.6 w ";
+  if(stroke) s+=`${stroke[0]} ${stroke[1]} ${stroke[2]} RG `;
+  s+=`${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re `;
+  s+= (fill&&stroke)?"B":(fill?"f":(stroke?"S":"n"));
+  cmd.push(s+" 0 0 0 rg 0 0 0 RG");
+}
+function pdfLine(cmd,x1,yTop1,x2,yTop2){
+  cmd.push(`0 0 0 RG ${x1.toFixed(2)} ${(841.89-yTop1).toFixed(2)} m ${x2.toFixed(2)} ${(841.89-yTop2).toFixed(2)} l S`);
+}
+function pdfTextCol(cmd,x,yTop,size,bold,text,rgb){
+  if(rgb) cmd.push(`${rgb[0]} ${rgb[1]} ${rgb[2]} rg`);
+  pdfText(cmd,x,yTop,size,bold,text);
+  if(rgb) cmd.push("0 0 0 rg");
+}
+function pdfTextC(cmd,xc,yTop,size,bold,text,rgb){ const w=pdfLatin1(text).length*size*0.5; pdfTextCol(cmd,xc-w/2,yTop,size,bold,text,rgb); }
+function hhStartMin(h){ const m=String(h).split(/[–-]/)[0].trim().match(/(\d{1,2})[:.](\d{2})/); return m?(+m[1]*60+ +m[2]):9999; }
+
+function downloadDailyPDF(){
+  if(activeSection!=="produzione" && activeSection!=="divisione"){ ioMsg("Apri una scheda (Produzione o Amministrativa) per scaricare il PDF."); return; }
+  const sect=activeSection;                 // il PDF riguarda l'area della scheda attiva
+  const secLabel = sect==="divisione" ? "Area Amministrativa" : "Area Produzione";
+  const date=new Date();                 // PDF di OGGI
+  const iso=toISO(date), wk=getISOWeekKey(date);
+  const ORANGE=[0.99,0.65,0.08], BLUE=[0.36,0.61,0.84], RED=[0.86,0.16,0.16], YELLOW=[1,0.92,0.32], GRAY=[0.62,0.62,0.62], GRAYCELL=[0.82,0.82,0.82], LINE=[0.55,0.55,0.55];
+  const TURNO_FILL={ "7:00-15:10":BLUE, "11:20-19:30":ORANGE, "12:20-20:30":YELLOW, "6:30-14:40":RED, "9:50-18:00":[0.62,0.44,0.86], "8:00-16:20":GRAYCELL };  // colore casella per orario
+  const inSect=w=>sectionOf(w.deptId)===sect;
+  const recOf=w=>getRec(wk,iso,w.id);
+  function orarioOf(w,rec){
+    const sh=effShift(w,rec,date);
+    if(sh==="absent"||sh==="home"||sh==="work") return null;
+    const ov=effTurnoOverride(w,rec); if(ov) return turnoInfo(ov).hours;
+    if(isNoShift(w)) return hoursFor(w.deptId,"morning");
+    return hoursFor(w.deptId, sh==="afternoon"?"afternoon":"morning");
+  }
+  function fillOf(w,rec){           // colore casella per orario (vedi TURNO_FILL); grigio=senza turno
+    if(isAbsentStatus(rec.status||"PRESENTE")) return null;
+    if(isNoShift(w)) return GRAYCELL;
+    const o=orarioOf(w,rec);
+    if(o){ const k=String(o).replace(/[–—-]/g,"-").replace(/\s+/g,""); return TURNO_FILL[k] || (hhStartMin(o)<12*60?ORANGE:BLUE); }
+    return null;
+  }
+  const rankOfW=w=>(w.isChief?0:(w.isLeader?1:2));
+  const sortW=ws=>ws.slice().sort((a,b)=>(rankOfW(a)-rankOfW(b))||a.name.localeCompare(b.name));
+  const hKey=h=>String(h).replace(/[–—-]/g,"-").replace(/\s+/g,"").trim();   // chiave per unificare orari uguali
+  function wrapText(text,maxW,size){
+    const words=String(text).split(/\s+/).filter(Boolean);
+    const maxCh=Math.max(5,Math.floor(maxW/(size*0.5)));
+    const lines=[]; let cur="";
+    for(const wd of words){
+      const t=cur?cur+" "+wd:wd;
+      if(t.length<=maxCh){ cur=t; continue; }
+      if(cur){ lines.push(cur); cur=""; }
+      if(wd.length>maxCh){ let s=wd; while(s.length>maxCh){ lines.push(s.slice(0,maxCh)); s=s.slice(maxCh); } cur=s; }
+      else cur=wd;
+    }
+    if(cur) lines.push(cur);
+    return lines;
+  }
+
+  // colonne orari distinte (unificate per orario uguale); i "senza turno" (orario fisso) per primi, poi per ora d'inizio
+  const orariMap=new Map();
+  for(const w of data.workers){ if(!inSect(w)) continue; const o=orarioOf(w,recOf(w)); if(o){ const k=hKey(o), fx=isNoShift(w); if(!orariMap.has(k)) orariMap.set(k,{disp:o,start:hhStartMin(o),fixed:fx}); else if(fx) orariMap.get(k).fixed=true; } }
+  const cols=[...orariMap.values()].sort((a,b)=>((b.fixed?1:0)-(a.fixed?1:0))||(a.start-b.start)).map(v=>v.disp);
+
+  const PW=595.28, PH=841.89, ML=26, MR=26, minNote=110;
+  let wName=148, wTime=24, wAss=22, wVar=80;
+  const availT=(PW-MR)-ML-wName-wAss-wVar-minNote;
+  if(cols.length>0 && cols.length*wTime>availT) wTime=Math.max(13, availT/cols.length);
+  const xName=ML, xTime=xName+wName, xAss=xTime+cols.length*wTime, xVar=xAss+wAss, xNote=xVar+wVar;
+  const wNote=(PW-MR)-xNote;
+  const cmd=[];
+
+  // intestazione
+  let y=30;
+  pdfTextC(cmd, PW/2, y, 15, true, "Divisione Editoria e Stampa"); y+=15;
+  pdfTextC(cmd, PW/2, y, 10, true, secLabel); y+=20;
+  pdfTextC(cmd, PW/2, y, 17, true, dateLabelIT(date));
+  if(isHoliday(iso)){ y+=13; pdfTextC(cmd, PW/2, y, 11, true, "— GIORNO FESTIVO —", RED); }
+  if(sect==="produzione"){
+    const teamM=isMorningTeam("A",date)?"A":"B";
+    pdfTextCol(cmd, PW-MR-22, 38, 26, true, teamM, BLUE);
+    pdfTextC(cmd, PW-MR-9, 52, 6.5, false, "turno mattina");
+  }
+  y+=14;
+
+  // intestazione colonne
+  const hT=y, hH=24;
+  pdfRect(cmd, xName, hT, wName, hH, null, LINE);
+  pdfText(cmd, xName+4, hT+15, 8, true, "Nominativo");
+  cols.forEach((h,i)=>{ const cx=xTime+i*wTime; pdfRect(cmd,cx,hT,wTime,hH,null,LINE); const p=String(h).split(/[–-]/); pdfTextC(cmd,cx+wTime/2,hT+10,6.3,false,(p[0]||"").trim()); pdfTextC(cmd,cx+wTime/2,hT+20,6.3,false,(p[1]||"").trim()); });
+  pdfRect(cmd, xAss, hT, wAss, hH, null, LINE); pdfTextC(cmd, xAss+wAss/2, hT+15, 7, true, "Ass.");
+  pdfRect(cmd, xVar, hT, wVar, hH, null, LINE); pdfTextC(cmd, xVar+wVar/2, hT+15, 7, true, "Variazione Turno");
+  pdfRect(cmd, xNote, hT, wNote, hH, null, LINE); pdfTextC(cmd, xNote+wNote/2, hT+15, 8, true, "Note");
+  y=hT+hH;
+
+  const rh=Math.max(18, Math.round(wTime)), bh=17, bhS=12, gap=6, wTot=(PW-MR)-ML;  // righe ~quadrate; gap tra reparti
+  function band(label){
+    pdfRect(cmd, ML, y, wTot, bh, GRAY, LINE);
+    pdfTextC(cmd, ML+wTot/2, y+bh-5, 9.5, true, label.toUpperCase(), [0,0,0]);
+    y+=bh;
+  }
+  function subBand(label){
+    pdfRect(cmd, ML, y, wTot, bhS, [0.86,0.86,0.86], LINE);
+    pdfTextC(cmd, ML+wTot/2, y+bhS-3.5, 7.5, true, label, [0.1,0.1,0.1]);
+    y+=bhS;
+  }
+  function rowFor(w){
+    const rec=recOf(w);
+    const sh=effShift(w,rec,date);
+    const absent=isAbsentStatus(rec.status||"PRESENTE");
+    const st=rec.status||"PRESENTE";
+    const fill=fillOf(w,rec);
+    // note (a capo nella larghezza colonna)
+    const notes=[];
+    if(!absent && (rec.deloc||st==="DELOCALIZZATO")) notes.push("DELOCALIZZATO");
+    if(st==="TELELAVORO") notes.push("TELELAVORO");
+    if(absent) notes.push(statusLabel(st).toUpperCase());
+    else if(st!=="PRESENTE"&&st!=="DELOCALIZZATO"&&st!=="TELELAVORO") notes.push(statusLabel(st));
+    if((rec.note||"").trim()) notes.push(rec.note.trim());
+    const noteLines = notes.length ? wrapText(notes.join(" · "), wNote-6, 7.3) : [];
+    const lineH=8;
+    const rowH=Math.max(rh, 6 + Math.max(1,noteLines.length)*lineH);
+    const top=y, midBase=top+rowH/2+3;
+    // nome
+    pdfRect(cmd, xName, top, wName, rowH, fill, LINE);
+    pdfTextCol(cmd, xName+4, midBase, 10, (w.isChief||w.isLeader), w.name+(w.isChief?" (C.O.)":""), null);
+    // orari (cella evidenziata sul turno della persona)
+    const ok=orarioOf(w,rec); const okk=ok?hKey(ok):null;
+    cols.forEach((h,i)=>{ const cx=xTime+i*wTime; const f=(!absent && okk===hKey(h))?(fill||ORANGE):null; pdfRect(cmd,cx,top,wTime,rowH,f,LINE); });
+    // Ass. → cella tutta nera se assente
+    pdfRect(cmd, xAss, top, wAss, rowH, absent?[0,0,0]:null, LINE);
+    // Variazione Turno
+    pdfRect(cmd, xVar, top, wVar, rowH, null, LINE);
+    let vt="";
+    if(absent) vt="Assente";
+    else if(sect==="produzione" && !isNoShift(w)&&!isWeekend(date)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,date)) vt="cambio turno";
+    if(vt) pdfTextC(cmd, xVar+wVar/2, midBase, 8, false, vt);
+    // Note (multilinea, centrate verticalmente)
+    pdfRect(cmd, xNote, top, wNote, rowH, null, LINE);
+    if(noteLines.length){ const startB=top+(rowH-noteLines.length*lineH)/2+lineH-1.5; noteLines.forEach((ln,i)=>pdfTextC(cmd, xNote+wNote/2, startB+i*lineH, 7.3, false, ln)); }
+    y+=rowH;
+  }
+  const stop=()=>y>PH-60;
+
+  // raggruppa per REPARTO (Senza Turno, Prestampa, Stampa, Allestimento…);
+  // dentro ogni reparto a turni: prima Turno A poi Turno B; in ogni gruppo i Leader per primi
+  const cont=()=>{ pdfText(cmd, ML, y+10, 8, false, "(continua…)"); };
+  for(const d of DEPTS){
+    if(d.section!==sect) continue;
+    const members=data.workers.filter(w=>w.deptId===d.id);
+    if(!members.length) continue;
+    if(stop()){ cont(); break; }
+    band(d.name);
+    if(d.shifted){
+      for(const [tm,label] of [["A","Turno A"],["B","Turno B"]]){
+        const sub=sortW(members.filter(w=>(w.baseTeam||"A")===tm));
+        if(!sub.length) continue;
+        if(stop()){ cont(); break; }
+        subBand(label);
+        for(const w of sub){ if(stop()){ cont(); break; } rowFor(w); }
+      }
+    }else{
+      for(const w of sortW(members)){ if(stop()){ cont(); break; } rowFor(w); }
+    }
+    y+=gap;   // piccola spaziatura tra un reparto e l'altro
+  }
+
+  // firme
+  const fy=Math.min(y+40, PH-30);
+  pdfText(cmd, ML, fy, 9, true, "IL TITOLARE DI DIVISIONE");
+  pdfText(cmd, PW-MR-150, fy-14, 9, true, sect==="produzione" ? "IL CAPO OFFICINA" : "IL RESPONSABILE");
+  pdfLine(cmd, PW-MR-150, fy, PW-MR, fy);
+
+  downloadBlob(`Presenze_${sect}_${iso}.pdf`, buildPdf(cmd.join("\n")+"\n"), "application/pdf");
+  ioMsg("PDF giornaliero ("+secLabel+") scaricato");
+}
+
+/* ====== Excel settimanale (.xlsx reale, Lun–Ven) ====== */
+function xmlEsc(s){ return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+const CRC_TABLE=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; } return t; })();
+function crc32(buf){ let c=0xFFFFFFFF; for(let i=0;i<buf.length;i++) c=CRC_TABLE[(c^buf[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function zipStore(files){
+  const enc=new TextEncoder();
+  const u16=n=>[n&0xFF,(n>>>8)&0xFF];
+  const u32=n=>[n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF];
+  const parts=[]; const central=[]; let offset=0;
+  for(const f of files){
+    const nameBytes=enc.encode(f.name);
+    const data=(f.data instanceof Uint8Array)?f.data:enc.encode(f.data);
+    const crc=crc32(data);
+    const lh=new Uint8Array([].concat(u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nameBytes.length),u16(0)));
+    parts.push(lh,nameBytes,data);
+    central.push({nameBytes,crc,size:data.length,offset});
+    offset+=lh.length+nameBytes.length+data.length;
+  }
+  const cParts=[]; let cSize=0;
+  for(const c of central){
+    const ch=new Uint8Array([].concat(u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(c.crc),u32(c.size),u32(c.size),u16(c.nameBytes.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(c.offset)));
+    cParts.push(ch,c.nameBytes); cSize+=ch.length+c.nameBytes.length;
+  }
+  const end=new Uint8Array([].concat(u32(0x06054b50),u16(0),u16(0),u16(central.length),u16(central.length),u32(cSize),u32(offset),u16(0)));
+  const all=parts.concat(cParts,[end]);
+  let total=0; for(const a of all) total+=a.length;
+  const out=new Uint8Array(total); let p=0; for(const a of all){ out.set(a,p); p+=a.length; }
+  return out;
+}
+function colLetter(n){ let s=""; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
+/* griglia con stili e celle unite */
+function sheetXmlStyled(grid, merges, cols){
+  let colsXml="";
+  if(cols&&cols.length) colsXml="<cols>"+cols.map(c=>`<col min="${c.min}" max="${c.max}" width="${c.w}" customWidth="1"/>`).join("")+"</cols>";
+  let sd="";
+  grid.forEach((row,ri)=>{
+    const r=ri+1; sd+=`<row r="${r}">`;
+    row.forEach((cell,ci)=>{
+      if(cell==null) return;
+      const ref=colLetter(ci+1)+r;
+      const s=cell.s?` s="${cell.s}"`:"";
+      const t=(cell.t==null)?"":String(cell.t);
+      sd+=`<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${xmlEsc(t)}</t></is></c>`;
+    });
+    sd+="</row>";
+  });
+  let mg="";
+  if(merges&&merges.length) mg=`<mergeCells count="${merges.length}">`+merges.map(m=>`<mergeCell ref="${m}"/>`).join("")+"</mergeCells>";
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+colsXml+'<sheetData>'+sd+'</sheetData>'+mg+'</worksheet>';
+}
+const XLS_STYLES='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+'<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>'+
+'<fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFC6EFCE"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFBDD7EE"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFFFC7CE"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFFFD966"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FF9DC3E6"/></patternFill></fill>'+
+'<fill><patternFill patternType="solid"><fgColor rgb="FFA6A6A6"/></patternFill></fill></fills>'+
+'<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>'+
+'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+'<cellXfs count="13">'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
+'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
+'<xf numFmtId="0" fontId="2" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
+'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+'</cellXfs></styleSheet>';
+function buildXlsx(grid, merges, cols){
+  const files=[
+    {name:"[Content_Types].xml", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
+    {name:"_rels/.rels", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
+    {name:"xl/workbook.xml", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Prospetto" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+    {name:"xl/_rels/workbook.xml.rels", data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},
+    {name:"xl/styles.xml", data:XLS_STYLES},
+    {name:"xl/worksheets/sheet1.xml", data:sheetXmlStyled(grid,merges,cols)}
+  ];
+  return zipStore(files);
+}
+function downloadWeeklyExcel(){
+  const days=weekDates(fromISO(anchorISO)).filter(d=>!isWeekend(d));   // esclude Sab/Dom · TUTTA LA DIVISIONE
+  const wkKey=getISOWeekKey(fromISO(anchorISO));
+  const rankW=w=>(w.isChief?0:(w.isLeader?1:2));
+  const sortW=ws=>ws.slice().sort((a,b)=>(rankW(a)-rankW(b))||a.name.localeCompare(b.name));
+  const nCols=1+days.length, lastCol=colLetter(nCols);
+
+  function cellsFor(w,rec,d){
+    const sh=effShift(w,rec,d);
+    const st=rec.status||"PRESENTE";
+    const absent=isAbsentStatus(st);
+    const deloc=rec.deloc||st==="DELOCALIZZATO";
+    let stT,stS;
+    if(absent){ stT=statusLabel(st).toUpperCase(); stS=7; }
+    else if(st==="TELELAVORO"){ stT="TELELAVORO"; stS=6; }
+    else if(deloc){ stT="DELOCALIZZATO"; stS=6; }
+    else { stT="IN PRESENZA"; stS=5; }
+    let tuT="", tuS=11;
+    if(!absent){
+      if(isWeekend(d)){ tuT=sh==="work"?"Al lavoro":"A casa"; tuS=11; }
+      else{
+        let hours=null, base="";
+        const ov=effTurnoOverride(w,rec);
+        if(ov){ const ti=turnoInfo(ov); hours=ti.hours; tuS=(ti.slot==="afternoon")?10:9; if(ov==="NONE"){ base="Fisso"; tuS=11; } }
+        else if(isNoShift(w)){ hours=hoursFor(w.deptId,"morning"); base="Fisso"; tuS=11; }
+        else if(sh==="morning"){ hours=hoursFor(w.deptId,"morning"); tuS=9; }
+        else if(sh==="afternoon"){ hours=hoursFor(w.deptId,"afternoon"); tuS=10; }
+        else if(sh==="present"){ hours=hoursFor(w.deptId,"present")||"8:00–16:20"; base="Al lavoro"; tuS=11; }
+        if(hours){ const code=turnoCode(hours); tuT = code ? code+" ("+hours+")" : (base ? base+" ("+hours+")" : "("+hours+")"); }
+      }
+    }
+    const notes=[];
+    const changed=!isNoShift(w)&&!isWeekend(d)&&!isG192(w,rec)&&(sh==="morning"||sh==="afternoon")&&sh!==autoWorkShift(w,d);
+    if(changed) notes.push("cambio turno");
+    if(!absent && st!=="PRESENTE" && st!=="DELOCALIZZATO" && st!=="TELELAVORO") notes.push(statusLabel(st));
+    if((rec.note||"").trim()) notes.push(rec.note.trim());
+    return {stT,stS,tuT,tuS,noT:notes.join(" · ")};
+  }
+
+  const grid=[], merges=[];
+  grid.push([{t:"PROSPETTO SETTIMANALE — DIVISIONE — Settimana "+wkKey, s:2}]); merges.push("A1:"+lastCol+"1");
+  const hdr=[{t:"Nominativo", s:1}]; days.forEach(d=>{ const h=isHoliday(toISO(d)); hdr.push({t:dateLabelIT(d)+(h?"\nGIORNO FESTIVO":""), s:h?7:1}); }); grid.push(hdr);
+  // raggruppa i reparti per area: prima l'Amministrativa, poi la Produzione
+  const orderedDepts=[...DEPTS.filter(d=>d.section==="divisione"), ...DEPTS.filter(d=>d.section==="produzione")];
+  let lastSec=null;
+  for(const dpt of orderedDepts){
+    const list=sortW(data.workers.filter(w=>w.deptId===dpt.id));
+    if(!list.length) continue;
+    if(dpt.section!==lastSec){   // separatore d'area
+      lastSec=dpt.section;
+      const ar=grid.length+1; const arName=(dpt.section==="divisione"?"AREA AMMINISTRATIVA":"AREA PRODUZIONE");
+      const arCells=[{t:arName, s:2}]; for(let i=1;i<nCols;i++) arCells.push({t:"", s:2}); grid.push(arCells);
+      merges.push("A"+ar+":"+lastCol+ar);
+    }
+    const br=grid.length+1; const bandCells=[{t:dpt.name, s:3}]; for(let i=1;i<nCols;i++) bandCells.push({t:"", s:3}); grid.push(bandCells);
+    merges.push("A"+br+":"+lastCol+br);
+    for(const w of list){
+      const r0=grid.length+1;
+      const rowS=[{t:(w.isChief?"★ ":(w.isLeader?"• ":""))+w.name, s:4}];
+      const rowT=[{t:"", s:4}], rowN=[{t:"", s:4}];
+      for(const d of days){
+        if(isHoliday(toISO(d))){ rowS.push({t:"", s:7}); rowT.push({t:"", s:7}); rowN.push({t:"", s:7}); continue; }  // festivo: celle vuote rosso chiaro
+        const rec=getRec(getISOWeekKey(d),toISO(d),w.id);
+        const c=cellsFor(w,rec,d);
+        rowS.push({t:c.stT, s:c.stS}); rowT.push({t:c.tuT, s:c.tuS}); rowN.push({t:c.noT, s:12});
+      }
+      grid.push(rowS); grid.push(rowT); grid.push(rowN);
+      merges.push("A"+r0+":A"+(r0+2));
+    }
+  }
+  const cols=[{min:1,max:1,w:26}]; for(let i=2;i<=nCols;i++) cols.push({min:i,max:i,w:30});
+  downloadBlob(`Prospetto_divisione_${wkKey}.xlsx`, buildXlsx(grid,merges,cols), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  ioMsg("Excel settimanale scaricato");
+}
+
+/* ====== Cloud condiviso (Firebase Realtime Database) ====== */
+const CLOUD_CFG_KEY="presenze_fb_config", CLOUD_ROOM_KEY="presenze_fb_room";
+let cloudRef=null, cloudSeeded=false, applyingRemote=false, pendingRemote=null;
+function cloudStatus(text,cls){ const b=$("cloudBanner"); if(!b) return; b.className="filebanner"+(cls?(" "+cls):""); b.textContent=text||""; }
+/* Avviso "aggiorna" se il cloud ha una versione più recente di questa copia */
+function checkUpdateBanner(cloudV){
+  const b=$("updBanner"); if(!b) return;
+  if(APP_VERSION < (Number(cloudV)||0)){
+    b.style.display="";
+    b.textContent="⚠️ Stai usando una copia NON aggiornata: alcune funzioni potrebbero mancare o non allinearsi. Chiedi il file aggiornato al responsabile (☁️ Cloud → 📤 Copia per i colleghi).";
+  }else{
+    b.style.display="none"; b.textContent="";
+  }
+}
+function getCloudCfg(){ try{ const r=localStorage.getItem(CLOUD_CFG_KEY); return r?JSON.parse(r):null; }catch{ return null; } }
+function getCloudRoom(){ return localStorage.getItem(CLOUD_ROOM_KEY) || "divisione"; }
+function parseFirebaseConfig(text){
+  let s=String(text||"").trim(); if(!s) throw new Error("Configurazione vuota.");
+  // normalizza le virgolette "intelligenti" (copia da PDF/email)
+  s=s.replace(/[“”]/g,'"').replace(/[‘’]/g,"'");
+  let body=null;
+  // caso tipico: incolla l'intero snippet con 'const firebaseConfig = { ... }'
+  const m=s.match(/firebaseConfig\s*=\s*(\{[\s\S]*?\})\s*;?/);
+  if(m){ body=m[1]; }
+  else { const i=s.indexOf("{"), j=s.lastIndexOf("}"); if(i>=0&&j>i) body=s.slice(i,j+1); }
+  if(body===null) throw new Error("Configurazione non valida.");
+  let cfg;
+  try{ cfg=JSON.parse(body); }catch{ try{ cfg=(new Function("return ("+body+")"))(); }catch(e){ throw new Error("Configurazione non leggibile."); } }
+  if(!cfg || !cfg.databaseURL) throw new Error("Manca 'databaseURL' (attiva il Realtime Database).");
+  return cfg;
+}
+async function initCloud(){
+  const cfg=getCloudCfg(); if(!cfg){ cloudStatus(""); return; }
+  if(typeof firebase==="undefined" || !firebase.initializeApp){ cloudStatus("☁️ Cloud configurato ma SDK non caricato (serve connessione internet).","warn"); return; }
+  try{
+    if(!firebase.apps || !firebase.apps.length) firebase.initializeApp(cfg);
+    try{ if(firebase.auth) await firebase.auth().signInAnonymously(); }catch(_){}
+    const room=getCloudRoom();
+    cloudRef=firebase.database().ref("rooms/"+room);
+    cloudStatus("☁️ Connessione condivisione…","info");
+    cloudRef.on("value", onCloudValue, err=>cloudStatus("☁️ Errore cloud: "+(err?.message||err),"warn"));
+  }catch(e){ cloudStatus("☁️ Errore cloud: "+(e?.message||e),"warn"); }
+}
+function onCloudValue(snap){
+  const val=snap.val(); const room=getCloudRoom();
+  if(val==null){
+    if(!cloudSeeded){ cloudSeeded=true; cloudPushAll(); cloudStatus("☁️ Condivisione attiva (stanza: "+room+") — dati iniziali inviati","ok"); }
+    return;
+  }
+  cloudSeeded=true;
+  cloudStatus("☁️ Condivisione attiva (stanza: "+room+")","ok");
+  // controllo versione: se il cloud ha una versione più recente della mia, avviso di aggiornare; se la mia è più recente, la registro
+  const cloudV=Number(val.appVersion)||0;
+  if(APP_VERSION > cloudV){ try{ cloudRef.child("appVersion").set(APP_VERSION); }catch{} }
+  checkUpdateBanner(cloudV);
+  const incoming={
+    workers: val.workers ? (Array.isArray(val.workers)?val.workers:Object.values(val.workers)) : [],
+    week:(val.week&&typeof val.week==="object")?val.week:{},
+    depts: val.depts ? (Array.isArray(val.depts)?val.depts:Object.values(val.depts)) : null,
+    holidays:(val.holidays&&typeof val.holidays==="object")?val.holidays:{},
+    confirms:(val.confirms&&typeof val.confirms==="object")?val.confirms:{}
+  };
+  const sameDepts = !incoming.depts || JSON.stringify(DEPTS)===JSON.stringify(incoming.depts.map(normDept));
+  if(sameDepts && JSON.stringify({w:data.workers.map(normWorker),k:data.week,h:data.holidays||{},c:data.confirms||{}})===JSON.stringify({w:incoming.workers.map(normWorker),k:incoming.week,h:incoming.holidays,c:incoming.confirms})) return;
+  if(expandedKey!==null){ pendingRemote=incoming; return; }   // non disturbare durante la modifica
+  applyRemoteNow(incoming);
+}
+function applyRemoteNow(incoming){
+  applyingRemote=true;
+  try{
+    if(incoming.depts){ setDepts(incoming.depts); try{ localStorage.setItem(STORE_DEPTS, JSON.stringify(DEPTS)); }catch{} }
+    data.workers=incoming.workers.map(normWorker).filter(w=>w.name && !REMOVED_IDS.has(w.id));
+    for(const x of data.workers){ if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N"; if(x.id==="stefano_ancillai") x.isChief=true; }
+    data.week=incoming.week||{};
+    data.holidays=incoming.holidays||{};
+    data.confirms=incoming.confirms||{};
+    try{ localStorage.setItem(STORE_WORKERS, JSON.stringify(data.workers)); localStorage.setItem(STORE_WEEK, JSON.stringify(data.week)); localStorage.setItem(STORE_HOLIDAYS, JSON.stringify(data.holidays)); localStorage.setItem(STORE_CONFIRMS, JSON.stringify(data.confirms)); }catch{}
+  } finally { applyingRemote=false; }
+  render();
+}
+function cloudPushAll(){ if(!cloudRef) return; try{ cloudRef.set({ workers:data.workers.map(normWorker), week:data.week||{}, depts:DEPTS, holidays:data.holidays||{}, confirms:data.confirms||{}, appVersion:APP_VERSION }); }catch{} }
+function cloudPushWorkers(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("workers").set(data.workers.map(normWorker)); }catch{} }
+function cloudPushDepts(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("depts").set(DEPTS); }catch{} }
+function cloudPushHolidays(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("holidays").set(data.holidays||{}); }catch{} }
+function cloudPushConfirms(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("confirms").set(data.confirms||{}); }catch{} }
+function cloudPushWeek(){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("week").set(data.week||{}); }catch{} }
+function cloudPushRecord(wk,iso,wid){
+  if(!cloudRef||applyingRemote||!cloudSeeded) return;
+  try{ const rec=(data.week[wk]&&data.week[wk].days[iso]&&data.week[wk].days[iso][wid])||null; cloudRef.child("week/"+wk+"/days/"+iso+"/"+wid).set(rec); }catch{}
+}
+function cloudRemoveWeek(wk){ if(!cloudRef||applyingRemote||!cloudSeeded) return; try{ cloudRef.child("week/"+wk).remove(); }catch{} }
+/* Genera una copia dell'app già collegata al cloud (per i colleghi: aprono e basta) */
+function exportConfiguredCopy(){
+  const cfg=getCloudCfg();
+  if(!cfg){ $("cloudMsg").textContent="Prima incolla la configurazione e premi 'Attiva condivisione', poi genera la copia."; return; }
+  const room=getCloudRoom();
+  const wasOpen=!$("cloudModal").classList.contains("hidden");
+  $("cloudModal").classList.add("hidden");
+  const embed='<script>window.PRESENZE_FB_EMBED='+JSON.stringify({cfg,room})+';<\/script>';
+  let html="<!doctype html>\n"+document.documentElement.outerHTML;
+  html=html.replace(/<head(\s[^>]*)?>/i, m=>m+"\n"+embed);
+  if(wasOpen) $("cloudModal").classList.remove("hidden");
+  downloadBlob("presenze_condiviso.html", html, "text/html;charset=utf-8");
+  $("cloudMsg").textContent="Copia generata: presenze_condiviso.html — invialo ai colleghi.";
+}
+
+/* ====== Move / mutations ====== */
+function moveWorker(wid,iso,shift){
+  const worker=data.workers.find(w=>w.id===wid);
+  const date=fromISO(iso);
+  if(isPastLocked(date)) return; // versione colleghi: giornate passate in sola lettura
+  if(isNoShift(worker) && !isWeekend(date) && shift==="afternoon") return; // Senza Turno: può andare in Assenze o restare al mattino, mai al pomeriggio
+  const wk=getISOWeekKey(date);
+  const rec=getRec(wk,iso,wid);
+  const patch={ shift };
+  if(shift!=="absent" && isAbsentStatus(rec.status||"PRESENTE")) patch.status="PRESENTE";
+  // spostando in Assenze, default a "Congedo ordinario" se non è già un'assenza
+  if(shift==="absent" && !isAbsentStatus(rec.status||"PRESENTE")) patch.status="CONGEDO_ORDINARIO";
+  if(isG192(worker,rec) && shift!=="morning") patch.g192=false;   // uscendo dalla mattina si annulla il G192
+  // trascinando manualmente in una fascia di lavoro si annulla il turno forzato (torna a comandare il drag)
+  if((shift==="morning"||shift==="afternoon"||shift==="present") && rec.turno) patch.turno="";
+  setRec(wk,iso,wid,patch);
+  render();
+}
+function changeStatus(wid,iso,status){
+  const date=fromISO(iso), wk=getISOWeekKey(date);
+  const worker=data.workers.find(w=>w.id===wid);
+  const rec=getRec(wk,iso,wid);
+  const patch={ status };
+  if(isAbsentStatus(status)) patch.shift="absent";
+  else if(rec.shift==="absent") patch.shift=autoWorkShift(worker,date);
+  setRec(wk,iso,wid,patch);
+  render();
+}
+
+/* ====== Render ====== */
+function renderTabs(){
+  const t=$("tabs"); if(!t) return; t.innerHTML="";
+  const tabs=SECTIONS.slice();
+  if(!isEmbed) tabs.push({ id:"editor", label:"⚙️ Editor" });   // nascosta nella versione colleghi
+  for(const s of tabs){
+    const b=document.createElement("button"); b.type="button"; b.textContent=s.label;
+    if(s.id===activeSection) b.classList.add("active");
+    b.addEventListener("click",()=>setSection(s.id));
+    t.appendChild(b);
+  }
+  const sub=$("subTitle");
+  if(sub) sub.textContent =
+      activeSection==="editor"   ? "Editor: gestisci i reparti e aggiungi le persone. (Questa scheda non compare nella versione per i colleghi.)"
+    : activeSection==="divisione"? "Area Amministrativa (orario fisso 8:00–16:20). Trascina i badge tra Al lavoro e Assenze. Salvataggio automatico."
+    :                              "Trascina i badge tra Mattina, Pomeriggio e Assenze, in ogni giorno. Salvataggio automatico.";
+}
+function renderSubTabs(){
+  const st=$("subtabs"); if(!st) return; st.innerHTML="";
+  if(activeSection!=="produzione" && activeSection!=="divisione"){ st.style.display="none"; return; }
+  const depts=DEPTS.filter(d=>d.section===activeSection);
+  if(!depts.length){ st.style.display="none"; return; }
+  st.style.display="";
+  const filt=deptFilters[activeSection];
+  const todayIso=toISO(new Date());
+  let allConfirmed=true;
+  for(const d of depts){
+    const wrap=document.createElement("span"); wrap.className="subtab-wrap"+(filt.has(d.id)?" active":"");
+    const nameB=document.createElement("button"); nameB.type="button"; nameB.className="subtab-name";
+    nameB.textContent=d.name;
+    nameB.title="Filtra: mostra solo "+d.name;
+    nameB.addEventListener("click",()=>{ if(filt.has(d.id)) filt.delete(d.id); else filt.add(d.id); render(); });
+    const conf=isConfirmed(todayIso,d.id); if(!conf) allConfirmed=false;
+    const thumb=document.createElement("button"); thumb.type="button"; thumb.className="subtab-thumb"+(conf?" on":"");
+    thumb.textContent="👍";
+    thumb.title=conf?("Presenze di oggi confermate per "+d.name+": clic per annullare"):("Conferma le presenze di oggi per "+d.name);
+    thumb.addEventListener("click",e=>{ e.stopPropagation(); toggleConfirm(todayIso,d.id); });
+    wrap.appendChild(nameB); wrap.appendChild(thumb);
+    st.appendChild(wrap);
+  }
+  if(filt.size){ const r=document.createElement("button"); r.type="button"; r.className="subtab reset"; r.textContent="✕ Mostra tutti"; r.addEventListener("click",()=>{ filt.clear(); render(); }); st.appendChild(r); }
+  if(allConfirmed){ const m=document.createElement("span"); m.className="confMsg"; m.textContent="✅ CONFERMATE PRESENZE ODIERNE"; st.appendChild(m); }
+}
+function render(){
+  if(isEmbed && activeSection==="editor") activeSection="produzione";
+  renderTabs();
+  renderSubTabs();
+  renderWeekLabel();
+  if(activeSection==="editor"){
+    $("week").style.display="none";
+    $("editorPanel").style.display="";
+    renderEditorPanel();
+  }else{
+    $("editorPanel").style.display="none";
+    $("week").style.display="";
+    renderWeek();
+  }
+  $("jsStatus").textContent = "OK";
+  // applica un aggiornamento remoto in coda quando la scheda è chiusa
+  if(expandedKey===null && pendingRemote){ const r=pendingRemote; pendingRemote=null; applyRemoteNow(r); }
+}
+function deptHoursDesc(d){
+  if(d.fixedMorning) return "Fisso "+(d.hours || hoursFor(d.id,"morning") || "8:00–16:20");
+  if(d.shifted){ const m=hoursFor(d.id,"morning"), a=hoursFor(d.id,"afternoon"); return "A turni"+((m||a)?(" "+(m||"?")+" / "+(a||"?")):""); }
+  return "Fisso "+(d.hours||"8:00–16:20");
+}
+function renderEditorPanel(){
+  fillAddMenus();
+  updateDeptForm();
+  // datalist orari: turni preimpostati (mattina/pomeriggio) da poter scegliere o scrivere a mano
+  const dm=$("turniMatt"), da=$("turniPom");
+  if(dm&&da){ dm.innerHTML=""; da.innerHTML=""; for(const t of TURNI){ const o=document.createElement("option"); o.value=t.hours; o.label=t.code+" ("+t.hours+")"; (t.slot==="morning"?dm:da).appendChild(o); } }
+  const dl=$("deptList"); if(!dl) return; dl.innerHTML="";
+  for(const d of DEPTS){
+    const row=document.createElement("div"); row.className="deptRow";
+    const info=document.createElement("div"); info.className="deptInfo";
+    const b=document.createElement("b"); b.textContent=d.name;
+    const meta=document.createElement("span"); meta.className="small muted";
+    const caps=[]; if(d.allowDeloc!==false) caps.push("🏠"); if(d.allowG192) caps.push("⏰ G192");
+    const secLab=d.section==="divisione" ? "Amministrativa" : "Produzione";
+    meta.textContent = "  "+secLab+"  ·  "+deptHoursDesc(d) + (caps.length? "  ·  "+caps.join("  ") : "");
+    info.appendChild(b); info.appendChild(meta);
+    // turno predefinito del reparto/area (es. Spedizioni → G032)
+    const ts=document.createElement("select"); ts.className="deptTurnoSel"; ts.title="Turno predefinito del reparto/area";
+    fillTurnoSelect(ts, d.defaultTurno, "Turno predef.: —");
+    ts.addEventListener("change",()=>{ const dd=deptById(d.id); if(dd){ dd.defaultTurno=ts.value; saveDepts(); render(); } });
+    const del=document.createElement("button"); del.type="button"; del.className="danger"; del.textContent="Elimina";
+    del.addEventListener("click",()=>deleteDept(d.id));
+    row.appendChild(info); row.appendChild(ts); row.appendChild(del);
+    dl.appendChild(row);
+  }
+}
+function renderWeekLabel(){
+  const days=weekDates(fromISO(anchorISO));
+  const a=days[0], b=days[6];
+  const wk=getISOWeekKey(fromISO(anchorISO));
+  $("wkLabel").innerHTML = `Settimana ${wk}<br><span class="small muted">${a.getDate()} ${MON[a.getMonth()]} – ${b.getDate()} ${MON[b.getMonth()]} ${b.getFullYear()}</span>`;
+}
+
+function rankOf(w){ return w.isChief ? 0 : (w.isLeader ? 1 : 2); }   /* Capo Officina sempre primo */
+function sortLeaderFirst(list){
+  return list.slice().sort((x,y)=>{
+    const r=rankOf(x.worker)-rankOf(y.worker);
+    if(r!==0) return r;
+    return x.worker.name.localeCompare(y.worker.name,"it");
+  });
+}
+
+function buildDayColumn(date, todayISO){
+  const iso=toISO(date), wk=getISOWeekKey(date);
+  const weekend=isWeekend(date);
+  const hol=isHoliday(iso);
+  const col=document.createElement("div");
+  col.className="day"+(iso===todayISO?" today":"")+(weekend?" weekend":"")+(isPastLocked(date)?" locked":"")+(hol?" holiday":"");
+
+  const head=document.createElement("div"); head.className="dayHead";
+  head.innerHTML=`<div class="dow">${DOW[(date.getDay()+6)%7]}</div><div class="dnum">${date.getDate()} ${MON[date.getMonth()]}</div>`;
+  const fb=document.createElement("button"); fb.type="button"; fb.className="festBtn"+(hol?" on":"");
+  fb.textContent=hol?"🎄 Festivo":"Festivo";
+  fb.title=hol?"Giorno festivo: clic per togliere":"Segna come giorno festivo";
+  if(isPastLocked(date)){ fb.style.pointerEvents="none"; } else { fb.addEventListener("click",e=>{ e.stopPropagation(); toggleHoliday(iso); }); }
+  head.appendChild(fb);
+  col.appendChild(head);
+
+  // buckets per turno (feriale: mattina/pomeriggio/assenze · weekend: al lavoro/a casa · divisione: al lavoro/assenze)
+  const shifts=shiftsFor(date);
+  const filt=deptFilters[activeSection];
+  const buckets={}; for(const s of shifts) buckets[s.id]=[];
+  for(const w of data.workers){
+    if(sectionOf(w.deptId)!==activeSection) continue;   // mostra solo gli operatori della scheda attiva
+    if(filt && filt.size && !filt.has(w.deptId)) continue;   // filtro reparto/area attivo
+    const rec=getRec(wk,iso,w.id);
+    const sh=effShift(w,rec,date);
+    (buckets[sh]||buckets[shifts[shifts.length-1].id]).push({ worker:w, rec });
+  }
+
+  const body=document.createElement("div"); body.className="dayBody";
+  for(const sh of shifts){
+    if(sh.optional && !buckets[sh.id].length) continue;   // Mattina/Pomeriggio in Amministrativa: solo se qualcuno ha un turno lì
+    const block=document.createElement("div"); block.className="shift "+sh.id;
+    block.dataset.shift=sh.id; block.dataset.date=iso;
+
+    const sHead=document.createElement("div"); sHead.className="shiftHead";
+    sHead.innerHTML=`<span>${sh.label}</span><span class="n">${buckets[sh.id].length}</span>`;
+    block.appendChild(sHead);
+
+    const sBody=document.createElement("div"); sBody.className="shiftBody";
+    const items=buckets[sh.id];
+
+    if(sh.split || sh.group==="div"){
+      // gruppi per reparto/area (solo quelli non vuoti)
+      const groups = sh.split ? splitGroups(items,sh.id) : divGroups(items);
+      for(const g of groups){
+        const grp=document.createElement("div"); grp.className="deptGroup";
+        const nm=document.createElement("div"); nm.className="deptName";
+        const lab=document.createElement("span"); lab.className="deptLabel";
+        const code = g.hours ? turnoCode(g.hours) : "";
+        let main = g.label;
+        if(code && !g.label.includes(code)) main += " · " + code;
+        lab.appendChild(document.createTextNode(main));
+        if(g.hours){ const hp=document.createElement("span"); hp.className="deptHours"; hp.textContent=" ("+g.hours+")"; lab.appendChild(hp); }
+        nm.appendChild(lab);
+        grp.appendChild(nm);
+        const bb=document.createElement("div"); bb.className="deptBadges";
+        for(const it of sortLeaderFirst(g.items)) bb.appendChild(buildBadge(it.worker,it.rec,iso,sh.id,date));
+        grp.appendChild(bb);
+        sBody.appendChild(grp);
+      }
+      if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent="— trascina qui —"; sBody.appendChild(e); }
+    }else{
+      if(!items.length){ const e=document.createElement("div"); e.className="emptyHint"; e.textContent=(sh.id==="absent"?"nessuno":"— trascina qui —"); sBody.appendChild(e); }
+      else for(const it of sortLeaderFirst(items)){ const b=buildBadge(it.worker,it.rec,iso,sh.id,date); if(sh.dim) b.classList.add("dim"); sBody.appendChild(b); }
+    }
+
+    block.appendChild(sBody);
+    body.appendChild(block);
+  }
+  col.appendChild(body);
+  return col;
+}
+
+function renderWeek(){
+  _delocCache=null;   // ricalcola i conteggi delocalizzazione a ogni render
+  const root=$("week"); root.innerHTML="";
+  const todayISO=toISO(new Date());
+  const weekendCols=[];
+  for(const date of weekDates(fromISO(anchorISO))){
+    if(isWeekend(date)) weekendCols.push(buildDayColumn(date,todayISO));
+    else root.appendChild(buildDayColumn(date,todayISO));
+  }
+  if(weekendCols.length){
+    const wrap=document.createElement("div");
+    wrap.className="weekendWrap"+(weekendCollapsed?" collapsed":"");
+    const handle=document.createElement("div");
+    handle.className="handle";
+    handle.textContent=(weekendCollapsed?"▸ ":"◂ ")+"Weekend";
+    handle.title=weekendCollapsed ? "Mostra Sabato e Domenica" : "Nascondi Sabato e Domenica";
+    handle.addEventListener("click",()=>setWeekendCollapsed(!weekendCollapsed));
+    const days=document.createElement("div"); days.className="wkndDays";
+    for(const c of weekendCols) days.appendChild(c);
+    wrap.appendChild(handle); wrap.appendChild(days);
+    root.appendChild(wrap);
+  }
+  fitBadgeStatuses();
+}
+/* stato accanto al nome: per intero se entra, altrimenti abbreviato */
+function fitBadgeStatuses(){
+  document.querySelectorAll("#week .badgeName").forEach(nm=>{
+    const ss=nm.querySelector(".badgeStatusInline"); if(!ss) return;
+    ss.textContent="  ·  "+(ss.dataset.full||"");
+    if(nm.scrollWidth > nm.clientWidth+1) ss.textContent="  ·  "+(ss.dataset.short||"");
+  });
+}
+
+function buildBadge(worker,rec,iso,curShift,date){
+  const st=rec.status||"PRESENTE";
+  const isAbs=isAbsentStatus(st);
+  const isDel=!!rec.deloc || st==="DELOCALIZZATO" || st==="TELELAVORO";
+  const g192=isG192(worker,rec);
+  const fixed=isNoShift(worker) && !isWeekend(date);   // turno fisso (Senza Turno) solo nei feriali
+  // cambio turno: collocato in un turno lavorativo diverso da quello automatico (solo feriali, no G192)
+  const isChanged=!fixed && !isWeekend(date) && !g192 && (curShift==="morning"||curShift==="afternoon") && curShift!==autoWorkShift(worker,date);
+  const key=worker.id+"__"+iso;
+  const open=expandedKey===key;
+  const locked=isPastLocked(date);   // versione colleghi: giornata passata in sola lettura
+
+  const el=document.createElement("div");
+  el.className="badge"+(worker.isLeader?" leader":"")+(isAbs?" isAbsent":"")+(isChanged?" changed":"")+(open?" open":"")+(isDel?" isDeloc":"")+(locked?" locked":"");
+  el.draggable=!locked;   // trascinabile (i senza turno solo verso Assenze/mattino: il blocco è in moveWorker)
+  el.dataset.id=worker.id;
+
+  // sfondo del box = colore del turno (40%, oppure 20% se delocalizzato); rosso 40%/20% se cambio turno
+  let bgRGB=null;
+  if(isChanged) bgRGB="255,107,107";                 // rosso: cambio turno
+  else if(curShift==="morning") bgRGB="31,111,235";  // blu: mattina
+  else if(curShift==="afternoon") bgRGB="246,194,106";// giallo: pomeriggio
+  if(bgRGB) el.style.backgroundColor="rgba("+bgRGB+","+(isDel?0.20:0.40)+")";
+
+  const head=document.createElement("div"); head.className="badgeHead";
+  if(worker.isChief){ const s=document.createElement("span"); s.className="chip crown"; s.textContent="👑"; s.title="Capo Officina"; head.appendChild(s); }
+  else if(worker.isLeader){ const s=document.createElement("span"); s.className="chip star"; s.textContent="★"; s.title="Leader"; head.appendChild(s); }
+  const nm=document.createElement("span"); nm.className="badgeName";
+  nm.appendChild(document.createTextNode(worker.name));
+  // stato accanto al nome: stato vero, oppure "Delocalizzato" se è attivo il flag deloc
+  const dispSt = (st!=="PRESENTE") ? st : (rec.deloc ? "DELOCALIZZATO" : null);
+  if(dispSt){
+    const ss=document.createElement("span"); ss.className="badgeStatusInline";
+    ss.dataset.full=statusLabel(dispSt); ss.dataset.short=statusShort(dispSt);
+    ss.textContent="  ·  "+ss.dataset.short;   // default abbreviato; il fit-pass lo allunga se c'è spazio
+    nm.appendChild(ss);
+    nm.title = worker.name + " — " + statusLabel(dispSt);
+  }
+  head.appendChild(nm);
+  // icona "cambio turno" accanto alle icone (vicino alla casetta)
+  if(isChanged){ const c=document.createElement("span"); c.className="chip changeChip"; c.textContent="🔄"; c.title="Cambio turno"; head.appendChild(c); }
+  // toggle Turno G192 (reparti abilitati) — mostrato PRIMA del delocalizzato
+  if(deptAllowsG192(worker) && !isWeekend(date)){
+    const gBtn=document.createElement("button");
+    gBtn.type="button";
+    gBtn.className="g192Btn"+(g192?" on":"");
+    gBtn.textContent="⏰";
+    gBtn.title=g192?("Turno G192 "+G192_HOURS+": clic per togliere"):("Attiva Turno G192 ("+G192_HOURS+")");
+    if(locked){ gBtn.style.pointerEvents="none"; }
+    else{
+      gBtn.addEventListener("mousedown",e=>e.stopPropagation());
+      gBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{g192:!rec.g192}); render(); });
+    }
+    head.appendChild(gBtn);
+  }
+
+  // toggle delocalizzato direttamente sul badge (solo reparti abilitati)
+  if(deptAllowsDeloc(worker)){
+    const delBtn=document.createElement("button");
+    delBtn.type="button";
+    delBtn.className="delBtn"+(isDel?" on":"");
+    delBtn.textContent="🏠";
+    delBtn.title=isDel?"Delocalizzato: clic per togliere":"Segna come delocalizzato";
+    if(locked){ delBtn.style.pointerEvents="none"; }
+    else{
+      delBtn.addEventListener("mousedown",e=>e.stopPropagation());
+      delBtn.addEventListener("click",e=>{ e.stopPropagation(); setRec(getISOWeekKey(date),iso,worker.id,{deloc:!rec.deloc}); render(); });
+    }
+    head.appendChild(delBtn);
+    // conteggio delocalizzazioni del mese, accanto alla casetta (non nella copia colleghi)
+    if(!isEmbed){ const dc=delocCountMonth(worker.id, iso.slice(0,7));
+      if(dc>0){ const c=document.createElement("span"); c.className="delCount"; c.textContent=dc; c.title="Delocalizzato "+dc+" giorn"+(dc===1?"o":"i")+" a "+MON[date.getMonth()]; head.appendChild(c); } }
+  }
+
+  if(!locked) head.addEventListener("click",()=>{ expandedKey=open?null:key; render(); });
+  el.appendChild(head);
+
+  if((rec.note||"").trim()){ const n=document.createElement("div"); n.className="badgeNote"; n.textContent=rec.note.trim(); el.appendChild(n); }
+
+  if(open) el.appendChild(buildEditor(worker,rec,iso,curShift));
+  return el;
+}
+
+function buildEditor(worker,rec,iso,curShift){
+  const wk=getISOWeekKey(fromISO(iso));
+  const ed=document.createElement("div"); ed.className="editor";
+  ed.addEventListener("click",e=>e.stopPropagation());
+  ed.draggable=false;
+  ed.addEventListener("mousedown",e=>e.stopPropagation());
+
+  // stato
+  const sel=document.createElement("select");
+  for(const s of STATUS){ const o=document.createElement("option"); o.value=s.id; o.textContent=s.label; if(s.id===(rec.status||"PRESENTE")) o.selected=true; sel.appendChild(o); }
+  sel.addEventListener("change",()=>changeStatus(worker.id,iso,sel.value));
+  ed.appendChild(sel);
+
+  // note
+  const note=document.createElement("input"); note.type="text"; note.placeholder="Note…"; note.maxLength=50; note.value=rec.note||"";
+  note.addEventListener("input",()=>setRec(wk,iso,worker.id,{note:clamp(note.value,50)}));
+  ed.appendChild(note);
+
+  // turno forzato (assegna a questa persona un turno anche se non compete al reparto/area)
+  const tsel=document.createElement("select");
+  fillTurnoSelect(tsel, rec.turno, "Turno: automatico");
+  tsel.addEventListener("change",()=>{ setRec(wk,iso,worker.id,{turno:tsel.value}); render(); });
+  ed.appendChild(tsel);
+
+  // anagrafica (modifica nome/area/squadra/leader/elimina): solo versione Editor, nascosta ai colleghi
+  if(!isEmbed){
+  const ana=document.createElement("div"); ana.className="anaBox";
+  const nameInp=document.createElement("input"); nameInp.type="text"; nameInp.value=worker.name; nameInp.maxLength=40; nameInp.placeholder="Nome";
+  nameInp.addEventListener("input",()=>{ worker.name=normName(nameInp.value); saveWorkers(); });
+  nameInp.addEventListener("blur",()=>render());
+  ana.appendChild(nameInp);
+
+  const deptSel=document.createElement("select");
+  for(const d of DEPTS){ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name; if(d.id===worker.deptId) o.selected=true; deptSel.appendChild(o); }
+  deptSel.addEventListener("change",()=>{ worker.deptId=deptSel.value; saveWorkers(); render(); });
+  ana.appendChild(deptSel);
+
+  const teamSel=document.createElement("select");
+  teamSel.innerHTML='<option value="A">Squadra A</option><option value="B">Squadra B</option>'; teamSel.value=worker.baseTeam;
+  teamSel.addEventListener("change",()=>{ worker.baseTeam=teamSel.value; saveWorkers(); render(); });
+  ana.appendChild(teamSel);
+
+  const leadSel=document.createElement("select");
+  leadSel.innerHTML='<option value="0">Leader: No</option><option value="1">Leader: Sì</option>'; leadSel.value=worker.isLeader?"1":"0";
+  leadSel.addEventListener("change",()=>{ worker.isLeader=(leadSel.value==="1"); saveWorkers(); render(); });
+  ana.appendChild(leadSel);
+
+  const del=document.createElement("button"); del.type="button"; del.className="danger"; del.textContent="Elimina operaio";
+  del.addEventListener("click",()=>{
+    if(!confirm("Eliminare "+worker.name+"?")) return;
+    data.workers=data.workers.filter(w=>w.id!==worker.id);
+    for(const k of Object.keys(data.week)){
+      const days=data.week[k]?.days||{};
+      for(const di of Object.keys(days)){ if(days[di]?.[worker.id]) delete days[di][worker.id]; }
+    }
+    if(expandedKey && expandedKey.startsWith(worker.id+"__")) expandedKey=null;
+    saveWorkers(); saveWeek(); cloudPushWeek(); render();
+  });
+  ana.appendChild(del);
+  ed.appendChild(ana);
+  }
+
+  return ed;
+}
+
+/* ====== Drag & Drop (delegato) ====== */
+function setupDnD(){
+  const root=$("week");
+  root.addEventListener("dragstart",e=>{
+    const b=e.target.closest(".badge"); if(!b) return;
+    dragId=b.dataset.id;
+    e.dataTransfer.effectAllowed="move";
+    try{ e.dataTransfer.setData("text/plain",dragId); }catch{}
+    b.classList.add("dragging");
+  });
+  root.addEventListener("dragend",e=>{
+    const b=e.target.closest(".badge"); if(b) b.classList.remove("dragging");
+    root.querySelectorAll(".shift.dropok").forEach(c=>c.classList.remove("dropok"));
+    dragId=null;
+  });
+  root.addEventListener("dragover",e=>{
+    const z=e.target.closest(".shift"); if(!z) return;
+    if(z.closest(".day.locked")) return;   // versione colleghi: giornata passata bloccata
+    const dw=dragId?data.workers.find(x=>x.id===dragId):null;
+    if(dw && isNoShift(dw) && z.dataset.shift==="afternoon" && !isWeekend(fromISO(z.dataset.date))) return; // senza turno: no pomeriggio
+    e.preventDefault(); e.dataTransfer.dropEffect="move";
+    root.querySelectorAll(".shift.dropok").forEach(c=>{ if(c!==z) c.classList.remove("dropok"); });
+    z.classList.add("dropok");
+  });
+  root.addEventListener("dragleave",e=>{
+    const z=e.target.closest(".shift");
+    if(z && !z.contains(e.relatedTarget)) z.classList.remove("dropok");
+  });
+  root.addEventListener("drop",e=>{
+    const z=e.target.closest(".shift"); if(!z) return;
+    e.preventDefault();
+    const id=dragId || (()=>{ try{ return e.dataTransfer.getData("text/plain"); }catch{ return null; } })();
+    z.classList.remove("dropok");
+    if(id) moveWorker(id, z.dataset.date, z.dataset.shift);
+  });
+}
+
+/* ====== Aggiungi operaio / Reparti ====== */
+function fillAddMenus(){
+  const ad=$("addDept"); if(!ad) return; ad.innerHTML="";
+  // nell'Editor mostra tutti i reparti, raggruppati per area; altrove solo la scheda attiva
+  const inEditor = (activeSection!=="produzione" && activeSection!=="divisione");
+  const list = inEditor ? DEPTS.slice() : DEPTS.filter(d=>d.section===activeSection);
+  list.forEach((d,i)=>{ const o=document.createElement("option"); o.value=d.id; o.textContent=d.name+(inEditor?(d.section==="divisione"?" (Ammin.)":" (Produz.)"):""); if(i===0) o.selected=true; ad.appendChild(o); });
+}
+function addWorker(){
+  const name=normName($("addName").value);
+  if(!name){ alert("Inserisci un nome."); return; }
+  const deptId=$("addDept").value || (DEPTS[0]&&DEPTS[0].id);
+  data.workers.push({ id:uuid(), name, deptId, baseTeam:$("addTeam").value, isLeader:$("addLeader").value==="1" });
+  saveWorkers();
+  $("addName").value="";
+  render();
+}
+/* mostra/nasconde i campi orario in base ad Area e "A turni" */
+function updateDeptForm(){
+  const sec=$("ndSection")?.value;
+  if(!sec) return;
+  const onShift = sec==="produzione" && $("ndShift").value==="1";
+  $("ndShiftWrap").style.display  = (sec==="produzione") ? "" : "none";
+  $("ndHoursMWrap").style.display = onShift ? "" : "none";
+  $("ndHoursAWrap").style.display = onShift ? "" : "none";
+  $("ndHoursWrap").style.display  = onShift ? "none" : "";
+}
+function addDeptFromForm(){
+  const name=normName($("ndName").value);
+  if(!name){ alert("Inserisci il nome del reparto."); return; }
+  if(DEPTS.some(d=>d.name.toLowerCase()===name.toLowerCase())){ alert("Esiste già un reparto con questo nome."); return; }
+  const section=$("ndSection").value;
+  const onShift = section==="produzione" && $("ndShift").value==="1";
+  const dep=normDept({
+    id:uuid(),
+    name,
+    section,
+    shifted:onShift,
+    fixedMorning: section==="produzione" && !onShift,
+    hoursM: onShift ? normName($("ndHoursM").value) : "",
+    hoursA: onShift ? normName($("ndHoursA").value) : "",
+    hours:  onShift ? "" : (normName($("ndHours").value) || (section==="divisione" ? "8:00–16:20" : "")),
+    allowDeloc:$("ndDeloc").value==="1",
+    allowG192:$("ndG192").value==="1",
+    builtin:false
+  });
+  DEPTS.push(dep);
+  saveDepts();
+  $("ndName").value=""; $("ndHoursM").value=""; $("ndHoursA").value=""; $("ndHours").value="";
+  render();
+}
+function deleteDept(id){
+  const d=deptById(id); if(!d) return;
+  if(DEPTS.length<=1){ alert("Deve restare almeno un reparto."); return; }
+  const n=data.workers.filter(w=>w.deptId===id).length;
+  if(n>0){ alert("Il reparto \""+d.name+"\" contiene "+n+" person"+(n===1?"a":"e")+". Spostale o eliminale prima di rimuovere il reparto."); return; }
+  if(!confirm("Eliminare il reparto \""+d.name+"\"?")) return;
+  DEPTS=DEPTS.filter(x=>x.id!==id);
+  saveDepts();
+  render();
+}
+
+/* ====== Reset settimana ====== */
+function resetWeek(){
+  const wk=getISOWeekKey(fromISO(anchorISO));
+  if(!confirm("Svuotare le scelte della settimana "+wk+"? (l'anagrafica resta)")) return;
+  delete data.week[wk]; saveWeek(); cloudRemoveWeek(wk); render();
+}
+
+/* ====== Init ====== */
+function bootstrap(){
+  const dp=loadStore(STORE_DEPTS);
+  if(Array.isArray(dp) && dp.length){ setDepts(dp); } else { setDepts(DEFAULT_DEPTS); saveDepts(); }
+  // correzione una tantum: Spedizioni non ha turno predefinito (il G032 si attiva per persona)
+  try{ if(!localStorage.getItem("presenze_mig_sp_turno")){ const sp=deptById("SP"); if(sp && sp.defaultTurno==="G032"){ sp.defaultTurno=""; saveDepts(); } localStorage.setItem("presenze_mig_sp_turno","1"); } }catch{}
+  const hol=loadStore(STORE_HOLIDAYS); if(hol && typeof hol==="object") data.holidays=hol;
+  const cf=loadStore(STORE_CONFIRMS); if(cf && typeof cf==="object") data.confirms=cf;
+  const w=loadStore(STORE_WORKERS);
+  if(Array.isArray(w) && w.length){ data.workers=w.map(normWorker); }
+  else{
+    // prova a migrare dalla versione precedente (v2) o usa l'anagrafica predefinita
+    const old=loadStore("presenze_divisione_workers_v2");
+    const src=(Array.isArray(old)&&old.length)?old:(window.HARD_WORKERS||[]);
+    data.workers=src.map(normWorker);
+  }
+  // rimuove gli operai eliminati definitivamente, assegna l'Area Senza Turno e il Capo Officina
+  data.workers=data.workers.filter(x=>!REMOVED_IDS.has(x.id));
+  for(const x of data.workers){
+    if(SENZA_TURNO_IDS.has(x.id)) x.deptId="N";
+    if(x.id==="stefano_ancillai") x.isChief=true;
+  }
+  saveWorkers();
+  const wk=loadStore(STORE_WEEK) || loadStore("presenze_divisione_week_v2");
+  if(wk && typeof wk==="object") data.week=wk;
+}
+
+function init(){
+  try{
+    bootstrap();
+    weekendCollapsed = (localStorage.getItem("presenze_weekend_collapsed")==="1");
+    fillAddMenus();
+    setupDnD();
+    $("prevWk").addEventListener("click",()=>{ const d=fromISO(anchorISO); d.setDate(d.getDate()-7); anchorISO=toISO(d); expandedKey=null; render(); });
+    $("nextWk").addEventListener("click",()=>{ const d=fromISO(anchorISO); d.setDate(d.getDate()+7); anchorISO=toISO(d); expandedKey=null; render(); });
+    $("todayBtn").addEventListener("click",()=>{ anchorISO=toISO(new Date()); expandedKey=null; render(); });
+    $("pdfBtn").addEventListener("click",()=>{ try{ downloadDailyPDF(); }catch(e){ ioMsg("errore PDF: "+(e?.message||e)); } });
+    $("xlsBtn").addEventListener("click",()=>{ try{ downloadWeeklyExcel(); }catch(e){ ioMsg("errore Excel: "+(e?.message||e)); } });
+    if(FSA){
+      // Chrome/Edge: collega un file nella cartella e salva/carica automaticamente
+      $("saveBtn").textContent="💾 Collega file";
+      $("saveBtn").title="Collega un file JSON nella cartella: salvataggio automatico a ogni modifica";
+      $("loadBtn").textContent="📂 Apri file";
+      $("loadBtn").title="Apri un file JSON esistente e collegalo per il salvataggio automatico";
+      $("saveBtn").addEventListener("click",fsaLinkSave);
+      $("loadBtn").addEventListener("click",fsaLinkOpen);
+    }else{
+      $("saveBtn").addEventListener("click",exportJson);
+      $("loadBtn").addEventListener("click",()=>$("fileInput").click());
+      setLinkStatus("salvataggio file automatico non disponibile in questo browser (usa Chrome/Edge)");
+    }
+    $("fileInput").addEventListener("change",async()=>{
+      const f=$("fileInput").files?.[0]; if(!f) return;
+      try{ await importJson(f); }catch(e){ ioMsg("errore: "+(e?.message||e)); alert("Errore caricamento: "+(e?.message||e)); }
+      finally{ $("fileInput").value=""; }
+    });
+    $("resetBtn").addEventListener("click",resetWeek);
+    $("addBtn").addEventListener("click",addWorker);
+    $("addName").addEventListener("keydown",e=>{ if(e.key==="Enter") addWorker(); });
+    $("ndAdd").addEventListener("click",addDeptFromForm);
+    $("ndName").addEventListener("keydown",e=>{ if(e.key==="Enter") addDeptFromForm(); });
+    $("ndSection").addEventListener("change",updateDeptForm);
+    $("ndShift").addEventListener("change",updateDeptForm);
+    $("holRome").addEventListener("click",autoSetRomeHolidays);
+
+    // Cloud (Firebase): modale di configurazione
+    const cm=$("cloudModal");
+    const openCloud=()=>{ const cfg=getCloudCfg(); $("cloudCfg").value=cfg?JSON.stringify(cfg,null,2):""; $("cloudRoom").value=getCloudRoom(); $("cloudMsg").textContent=getCloudCfg()?"Condivisione configurata.":"Non configurata."; cm.classList.remove("hidden"); };
+    $("cloudBtn").addEventListener("click",openCloud);
+    $("cloudClose").addEventListener("click",()=>cm.classList.add("hidden"));
+    cm.addEventListener("click",e=>{ if(e.target===cm) cm.classList.add("hidden"); });
+    $("cloudConnect").addEventListener("click",()=>{
+      try{
+        const cfg=parseFirebaseConfig($("cloudCfg").value);
+        const room=normName($("cloudRoom").value)||"divisione";
+        localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(cfg));
+        localStorage.setItem(CLOUD_ROOM_KEY, room);
+        $("cloudMsg").textContent="Salvato. Riavvio…";
+        location.reload();
+      }catch(e){ $("cloudMsg").textContent="Errore: "+(e?.message||e); }
+    });
+    $("cloudExport").addEventListener("click",exportConfiguredCopy);
+    $("cloudDisconnect").addEventListener("click",()=>{
+      try{ if(cloudRef) cloudRef.off(); }catch{}
+      cloudRef=null; cloudSeeded=false;
+      localStorage.removeItem(CLOUD_CFG_KEY);
+      cloudStatus(""); $("cloudMsg").textContent="Condivisione disattivata.";
+    });
+
+    // copia pre-configurata aperta da un collega: usa la configurazione incorporata
+    if(window.PRESENZE_FB_EMBED && window.PRESENZE_FB_EMBED.cfg){
+      if(!getCloudCfg()){
+        try{
+          localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(window.PRESENZE_FB_EMBED.cfg));
+          localStorage.setItem(CLOUD_ROOM_KEY, window.PRESENZE_FB_EMBED.room||"divisione");
+        }catch{}
+      }
+      // versione colleghi: nascondi Cloud/Salva/Carica e mostra solo lo stato condivisione
+      isEmbed = true;
+      document.body.classList.add("embed");
+      const tb=document.querySelector(".toolbar"), cb=$("cloudBanner"), rb=$("resetBtn");
+      if(tb&&cb&&rb) tb.insertBefore(cb, rb);
+    }
+
+    render();
+    fsaReconnect();   // ricollega il file dati se già scelto in precedenza
+    initCloud();      // attiva la condivisione se già configurata
+    // controllo a mezzanotte: al cambio di giorno riaggiorna la vista (pollici di conferma azzerati)
+    let curDayISO=toISO(new Date());
+    setInterval(()=>{ const d=toISO(new Date()); if(d!==curDayISO){ curDayISO=d; if(expandedKey===null) render(); } }, 30000);
+  }catch(e){
+    $("jsStatus").textContent="ERRORE";
+    ioMsg((e?.stack||e?.message||String(e)));
+  }
+}
+
+if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init);
+else init();
+})();
+</script>
+</body>
+</html>
